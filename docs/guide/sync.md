@@ -28,7 +28,7 @@
   :sync="true"
   :prefix="{
     prod: '/example/prod',
-    test: '/example/test'
+    test: '/example/test',
     prodId: '/example/prod/debug?id=',
   }"
 ></WujieVue>

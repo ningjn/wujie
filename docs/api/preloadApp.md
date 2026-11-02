@@ -8,11 +8,11 @@
 type lifecycle = (appWindow: Window) => any;
 type loadErrorHandler = (url: string, e: Error) => any;
 
-type preOptions  {
+type preOptions = {
   /** 唯一性用户必须保证 */
   name: string;
-  /** 需要渲染的url */
-  url: string;
+  /** 需要渲染的url；已通过 setupApp 配置时可省略 */
+  url?: string;
   /** 需要渲染的html, 如果用户已有则无需从url请求 */
   html?: string;
   /** 注入给子应用的数据 */

@@ -172,13 +172,14 @@ export function proxyGenerator(
               if (ctx !== iframe.contentDocument) {
                 return ctx[propKey]?.apply(ctx, args);
               }
-              // 二选一，优先shadowDom，除非采用array合并，排除base，防止对router造成影响
-              return (
-                target.apply(shadowRoot, args) ||
-                (args[0] === "base"
-                  ? null
-                  : iframe.contentWindow[rawPropMap[propKey]].call(iframe.contentWindow.document, args[0]))
-              );
+              // 优先 shadowDom；querySelectorAll 的空 NodeList 也是 truthy，需要显式回退到 iframe 文档
+              const shadowResult = target.apply(shadowRoot, args);
+              if (shadowResult && (propKey === "querySelector" || (shadowResult as NodeList).length > 0)) {
+                return shadowResult;
+              }
+              return args[0] === "base"
+                ? null
+                : iframe.contentWindow[rawPropMap[propKey]].call(iframe.contentWindow.document, args[0]);
             },
           });
         }

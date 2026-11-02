@@ -244,6 +244,12 @@ export async function renderTemplateToShadowRoot(
   iframeWindow: Window,
   template: string
 ): Promise<void> {
+  // 并发 startApp（如 React StrictMode 双挂载）竞态下 template 可能为空。
+  // 若继续渲染，DOMParser.parseFromString(undefined) 与 html.innerHTML = undefined
+  // 都会把字面量 "undefined" 渲染进 shadowRoot，表现为首次加载闪现 undefined 文本。
+  // 这里直接跳过，等真实模板 active 时会重新渲染。
+  if (!template) return;
+
   const html = renderTemplateToHtml(iframeWindow, template);
   // 处理 css-before-loader 和 css-after-loader
   const processedHtml = await processCssLoaderForTemplate(iframeWindow.__WUJIE, html);
@@ -295,6 +301,9 @@ export async function renderTemplateToIframe(
   iframeWindow: Window,
   template: string
 ): Promise<void> {
+  // 同 renderTemplateToShadowRoot：空 template 直接跳过，避免降级渲染把 "undefined" 写入 iframe document
+  if (!template) return;
+
   // 插入template
   const html = renderTemplateToHtml(iframeWindow, template);
   // 处理 css-before-loader 和 css-after-loader
