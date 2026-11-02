@@ -4,6 +4,7 @@
  * @type {import('@vue/cli-service').ProjectOptions}
  */
 module.exports = {
+  transpileDependencies: ["vue-router", "element-plus", "@ctrl/tinycolor"],
   publicPath: "./",
   devServer: {
     headers: {

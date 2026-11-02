@@ -1,4 +1,5 @@
 module.exports = {
+  transpileDependencies: ["vue-router"],
   lintOnSave: false,
   publicPath: process.env.NODE_ENV === "production" ? "/demo-main-vue/" : "/",
   devServer: {
