@@ -40,13 +40,9 @@ window.parent.xxx;
 // 如果使用wujie
 import { bus } from "wujie";
 
-// 如果使用wujie-vue
-import WujieVue from "wujie-vue";
+// 如果使用wujie-vue3
+import WujieVue from "wujie-vue3";
 const { bus } = WujieVue;
-
-// 如果使用wujie-react
-import WujieReact from "wujie-react";
-const { bus } = WujieReact;
 
 // 主应用监听事件
 bus.$on("事件名字", function (arg1, arg2, ...) {});

@@ -32,18 +32,11 @@ WujieDemo 采用 TurboRepo 进行管理 支持多种包管理器
 
 | MainFramework     | finish |
 | ----------------- | ------ |
-| React17 + Webpack | ✅ 🆕  |
-| Vue2 + Webpack    | ✅     |
 | Vue3 + Vite3      | ✅     |
 
 ### 支持子应用框架
 
 | SubFramework      | finish |
 | ----------------- | ------ |
-| React16 + Webpack | ✅ 🆕  |
-| React17 + Webpack | ✅ 🆕  |
-| React18 + Webpack | 🚧     |
 | Vue3 + Vite       | ✅     |
-| Vue2 + Webpack    | ✅     |
 | Vue3 + Webpack    | ✅     |
-| Angular12         | ✅     |

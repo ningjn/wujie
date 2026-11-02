@@ -70,10 +70,6 @@ export default defineConfig({
             text: "Vue主应用",
             link: "https://wujie-micro.github.io/demo-main-vue/home",
           },
-          {
-            text: "React主应用",
-            link: "https://wujie-micro.github.io/demo-main-react/",
-          },
         ],
       },
       { text: "在线体验无界", link: "/wujie/", activeMatch: "/wujie/" },
@@ -158,10 +154,6 @@ export default defineConfig({
               text: "vue主应用",
               link: "https://github.com/Tencent/wujie/tree/master/examples/main-vue",
             },
-            {
-              text: "react主应用",
-              link: "https://github.com/Tencent/wujie/tree/master/examples/main-react",
-            },
           ],
         },
         {
@@ -230,10 +222,6 @@ export default defineConfig({
             {
               text: "Vue组件封装",
               link: "/pack/",
-            },
-            {
-              text: "React组件封装",
-              link: "/pack/react",
             },
           ],
         },

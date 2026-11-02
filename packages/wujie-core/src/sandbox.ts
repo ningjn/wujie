@@ -237,7 +237,7 @@ export default class Wujie {
           recoverEventListeners(iframe.contentDocument.documentElement, iframeWindow);
         } else {
           await renderTemplateToIframe(iframe.contentDocument, this.iframe.contentWindow, this.template);
-          // 非保活场景需要恢复根节点的事件，防止react16监听事件丢失
+          // 非保活场景需要恢复根节点的事件，防止旧版子应用监听事件丢失
           recoverDocumentListeners(this.document.documentElement, iframe.contentDocument.documentElement, iframeWindow);
         }
       } else {
@@ -254,8 +254,8 @@ export default class Wujie {
     if (this.shadowRoot) {
       /*
        document.addEventListener was transfer to shadowRoot.addEventListener
-       react 16 SyntheticEvent will remember document event for avoid repeat listen
-       shadowRoot have to dispatchEvent for react 16 so can't be destroyed
+       legacy synthetic-event systems will remember document event for avoid repeat listen
+       shadowRoot have to dispatchEvent for legacy synthetic-event systems so can't be destroyed
        this may lead memory leak risk
        */
       this.el = renderElementToContainer(this.shadowRoot.host, el);

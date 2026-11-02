@@ -1,18 +1,11 @@
-// vue.config.js
-
-/**
- * @type {import('@vue/cli-service').ProjectOptions}
- */
 module.exports = {
+  lintOnSave: false,
   publicPath: process.env.NODE_ENV === "production" ? "/demo-main-vue/" : "/",
   devServer: {
     headers: {
       "Access-Control-Allow-Origin": "*",
     },
-    open: process.env.NODE_ENV === "development",
+    open: false,
     port: "8000",
   },
-  transpileDependencies: [
-    "sockjs-client",
-  ],
 };

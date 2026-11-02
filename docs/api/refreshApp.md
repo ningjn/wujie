@@ -14,7 +14,7 @@
 
 - 子应用处于 [重建模式](/guide/mode.html#重建模式)，需要强制全量重建以清空状态、重新加载资源
 - 子应用代码或静态资源已更新，需要销毁旧实例后重新拉取
-- 使用 Vue / React 组件封装时，也可通过组件 ref 调用 [refresh()](/pack/#refresh)，**无需传参**，自动复用组件当前 props 全量重建
+- 使用 Vue3 组件封装时，也可通过组件 ref 调用 [refresh()](/pack/#refresh)，**无需传参**，自动复用组件当前 props 全量重建
 
 :::
 
@@ -38,7 +38,7 @@ await refreshApp({
 });
 ```
 
-使用 Vue / React 组件封装时：
+使用 Vue3 组件封装时：
 
 ```javascript
 // 静态方法 refreshApp，参数与 startApp 相同

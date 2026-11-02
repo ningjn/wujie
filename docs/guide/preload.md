@@ -13,7 +13,7 @@
 
 只需要在`preloadApp`中将 [exec](/api/preloadApp.html#exec) 设置为`true`即可
 
-由于子应用提前渲染可能会导致阻塞主应用的线程，所以无界提供了类似 [react-fiber](https://github.com/acdlite/react-fiber-architecture) 方式来防止阻塞线程，详见 [fiber](/api/startApp.html#fiber)
+由于子应用提前渲染可能会导致阻塞主应用的线程，所以无界提供了fiber 化分段执行方式来防止阻塞线程，详见 [fiber](/api/startApp.html#fiber)
 
 ## 清理资源缓存
 

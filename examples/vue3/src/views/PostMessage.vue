@@ -4,7 +4,6 @@
     <div class="title">vue3-iframe</div>
     <div style="padding-bottom: 10px">接收的消息：{{ message }}</div>
     <el-button @click="postMessageToMain">发送消息给主应用</el-button>
-    <el-button @click="postMessageToSubApp">发送消息给vue2子应用(借助主应用)</el-button>
     <el-button @click="postMessageToIframe">发送消息给自己(借助主应用)</el-button>
   </div>
 </template>
@@ -34,11 +33,6 @@ export default {
       const mainWindow = window.parent;
       const data = { type: "main", message: "hello, i'm sub app's iframe" };
       mainWindow.postMessage(JSON.stringify(data), "*");
-    },
-    postMessageToSubApp() {
-      const iframe = window.parent;
-      const data = { type: "vue2", message: "hello, i'm sub app's iframe" };
-      iframe.postMessage(JSON.stringify(data), "*");
     },
     postMessageToIframe() {
       const iframe = window.parent;

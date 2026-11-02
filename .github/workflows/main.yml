@@ -52,8 +52,6 @@ jobs:
 
           const packages = [
             "packages/wujie-core",
-            "packages/wujie-react",
-            "packages/wujie-vue2",
             "packages/wujie-vue3",
           ];
 
@@ -93,8 +91,6 @@ jobs:
           }
 
           publish_package packages/wujie-core
-          publish_package packages/wujie-react
-          publish_package packages/wujie-vue2
           publish_package packages/wujie-vue3
         env:
           NPM_CONFIG_PROVENANCE: "true"

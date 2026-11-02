@@ -7,20 +7,13 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 package_dirs=(
   "packages/wujie-core"
-  "packages/wujie-vue2"
   "packages/wujie-vue3"
-  "packages/wujie-react"
 )
 
 scripts=(
-  "local-angular12-build.sh"
   "local-vue3-build.sh"
-  "local-vue2-build.sh"
   "local-vite-build.sh"
-  "local-react17-build.sh"
-  "local-react16-build.sh"
   "local-main-vue.sh"
-  "local-main-react.sh"
 )
 
 pids=()

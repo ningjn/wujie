@@ -8,10 +8,6 @@ export const wujieList = [
     url: "https://ant.design/components/drawer-cn/",
   },
   {
-    name: "React",
-    url: "https://react.dev/",
-  },
-  {
     name: "Webpack",
     url: "https://webpack.js.org/",
   },

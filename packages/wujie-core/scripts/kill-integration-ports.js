@@ -5,7 +5,7 @@
 const { execSync } = require("child_process");
 
 /** 与 jest-puppeteer.config.js 中 server[].port 保持一致 */
-const INTEGRATION_PORTS = [7600, 7100, 7200, 7300, 7500, 7400, 7700, 8000];
+const INTEGRATION_PORTS = [7300, 7500, 8000];
 
 function execQuiet(command) {
   return execSync(command, {

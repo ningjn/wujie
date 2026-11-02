@@ -1,4 +1,4 @@
-import { vueMainAppInfoMap } from "./common";
+import { appInfoMap } from "./common";
 import { awaitConsoleLogMessage } from "./utils";
 
 describe("main vue instanceof patch", () => {
@@ -12,7 +12,7 @@ describe("main vue instanceof patch", () => {
   });
 
   it("example 子应用中主应用 realm 的元素和事件应通过子应用构造函数的 instanceof 判断", async () => {
-    const appInfo = vueMainAppInfoMap.vue3;
+    const appInfo = appInfoMap.vue3;
     const appInfoMountedPromise = awaitConsoleLogMessage(page, appInfo.mountedMessage);
     await page.click(appInfo.linkSelector);
     await appInfoMountedPromise;

@@ -14,7 +14,7 @@ import { bus, setupApp, preloadApp, startApp, destroyApp, refreshApp, clearAsset
 ```
 
 ::: tip 提示
-如果主应用是`vue`框架可直接使用 [wujie-vue](/pack/)，`react`框架可直接使用 [wujie-react](/pack/react.html)
+如果主应用是 Vue3，可直接使用 [wujie-vue3](/pack/)
 :::
 
 ### 设置子应用
@@ -79,24 +79,6 @@ app.use((req, res, next) => {
 
 具体操作可以参考下面示例
 
-::: details vue2
-
-```javascript
-if (window.__POWERED_BY_WUJIE__) {
-  let instance;
-  window.__WUJIE_MOUNT = () => {
-    const router = new VueRouter({ routes });
-    instance = new Vue({ router, render: (h) => h(App) }).$mount("#app");
-  };
-  window.__WUJIE_UNMOUNT = () => {
-    instance.$destroy();
-  };
-} else {
-  new Vue({ router: new VueRouter({ routes }), render: (h) => h(App) }).$mount("#app");
-}
-```
-
-:::
 ::: details vue3
 
 ```javascript
@@ -155,62 +137,6 @@ if (window.__POWERED_BY_WUJIE__) {
   createApp(App).use(createRouter({ history: createWebHistory(), routes })).mount("#app");
 }
 
-```
-
-:::
-::: details react
-
-```javascript
-if (window.__POWERED_BY_WUJIE__) {
-  window.__WUJIE_MOUNT = () => {
-    ReactDOM.render(
-      <React.StrictMode>
-        <App />
-      </React.StrictMode>,
-      document.getElementById("root")
-    );
-  };
-  window.__WUJIE_UNMOUNT = () => {
-    ReactDOM.unmountComponentAtNode(document.getElementById("root"));
-  };
-} else {
-  ReactDOM.render(
-    <React.StrictMode>
-      <App />
-    </React.StrictMode>,
-    document.getElementById("root")
-  );
-}
-```
-
-:::
-::: details angular
-
-```typescript
-declare global {
-  interface Window {
-    // 是否存在无界
-    __POWERED_BY_WUJIE__?: boolean;
-    // 子应用mount函数
-    __WUJIE_MOUNT: () => void;
-    // 子应用unmount函数
-    __WUJIE_UNMOUNT: () => void | Promise<void>;
-  }
-}
-
-if (window.__POWERED_BY_WUJIE__) {
-  let instance: any;
-  window.__WUJIE_MOUNT = async () => {
-    instance = await platformBrowserDynamic().bootstrapModule(AppModule);
-  };
-  window.__WUJIE_UNMOUNT = () => {
-    instance.destroy?.();
-  };
-} else {
-  platformBrowserDynamic()
-    .bootstrapModule(AppModule)
-    .catch((err) => console.error(err));
-}
 ```
 
 :::

@@ -48,17 +48,11 @@ npx skills add wujie-micro/wujie-skill
 
 | 主应用框架        |     |
 | ----------------- | --- |
-| Webpack + Vue2    | ✅  |
-| Webpack + React17 | ✅  |
-| Vite + Vue3       | 🚧  |
+| Vite + Vue3       | ✅  |
 
 - 子应用列表
 
 | 子应用框架        |     |
 | ----------------- | --- |
 | Vite + Vue3       | ✅  |
-| Webpack + Vue2    | ✅  |
 | Webpack + Vue3    | ✅  |
-| Webpack + React16 | ✅  |
-| Webpack + React17 | ✅  |
-| Angular12         | ✅  |

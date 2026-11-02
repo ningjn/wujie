@@ -61,26 +61,19 @@ import { startApp } from "wujie";
 startApp({ name: "唯一id", url: "子应用路径", el: "容器", sync: true });
 ```
 
-### vue 框架
+### Vue3 框架
 
 - 安装
 
 ```bash
-# vue2 框架
-npm i wujie-vue2 -S
-# vue3 框架
 npm i wujie-vue3 -S
-
 ```
 
 - 引入
 
 ```javascript
-// vue2
-import WujieVue from "wujie-vue2";
-Vue.use(WujieVue);
-// vue3
 import WujieVue from "wujie-vue3";
+
 app.use(WujieVue);
 ```
 
@@ -103,40 +96,6 @@ app.use(WujieVue);
   :afterUnmount="afterUnmount"
 ></WujieVue>
 
-```
-
-### react 框架
-
-- 安装
-
-```bash
-npm i wujie-react -S
-
-```
-
-- 引入
-
-```javascript
-import WujieReact from "wujie-react";
-```
-
-- 使用
-
-```html
-<WujieReact
-  width="100%"
-  height="100%"
-  name="xxx"
-  url="{xxx}"
-  sync="{true}"
-  fetch="{fetch}"
-  props="{props}"
-  beforeLoad="{beforeLoad}"
-  beforeMount="{beforeMount}"
-  afterMount="{afterMount}"
-  beforeUnmount="{beforeUnmount}"
-  afterUnmount="{afterUnmount}"
-></WujieReact>
 ```
 
 ## 常见问题

@@ -53,14 +53,7 @@ export async function triggerClickByJsSelector(page: Page, selector: string): Pr
   return element.asElement().click();
 }
 
-type SearchMap = {
-  react16: string;
-  react17: string;
-  vue2: string;
-  vue3: string;
-  vite: string;
-  angular12: string;
-};
+type SearchMap = Record<string, string | undefined>;
 
 export function getUrlSearchObject(url: string): SearchMap {
   let search = new URL(url).search.replace("?", "");

@@ -4,7 +4,7 @@
     <p>应用可以有三种方式进行通信：</p>
     <h3>1、主应用通过 props 属性注入的方法</h3>
     <p>主应用通过 props 注入 jump（跳转页面）方法，子应用通过 $wujie.props.jump(xxx) 来使用</p>
-    <p><el-button @click="handleClick">点击跳转react17</el-button></p>
+    <p><el-button @click="handleClick">点击跳转vue3</el-button></p>
     <h3>2、通过 window.parent 方法拿到主应用的全局方法</h3>
     <p>子应用调用 window.parent.alert 来调用主应用的 alert方法</p>
     <p><el-button @click="handleAlert">显示alert</el-button></p>
@@ -28,7 +28,7 @@ export default {
   },
   methods: {
     handleClick() {
-      window?.$wujie.props.jump("react17");
+      window?.$wujie.props.jump("vue3");
     },
     handleAlert() {
       window?.parent.alert("主应用alert");

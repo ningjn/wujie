@@ -1,45 +1,21 @@
 import { awaitConsoleLogMessage, getTextContentByJsSelector } from "./utils";
-import { reactMainAppInfoList, vueMainAppInfoList } from "./common";
+import { appInfoList } from "./common";
 
-describe("main react degrade", () => {
+describe("Vue3 host degrade", () => {
   beforeAll(async () => {
     await page.evaluateOnNewDocument(() => {
-      // 开启主动降级
-      localStorage.clear();
-      localStorage.setItem("preload", "false");
-      localStorage.setItem("degrade", "true");
-    });
-    await page.goto("http://localhost:7700/");
-    await page.waitForNavigation();
-  });
-
-  reactMainAppInfoList.forEach((appInfo) =>
-    it(`${appInfo.name} degrade`, async () => {
-      const appInfoMountedPromise = awaitConsoleLogMessage(page, appInfo.mountedMessage);
-      await page.click(appInfo.linkSelector);
-      await appInfoMountedPromise;
-      expect(await getTextContentByJsSelector(page, appInfo.degradeTitleJsSelector)).toBe(appInfo.titleText);
-    })
-  );
-});
-
-describe("main vue degrade", () => {
-  beforeAll(async () => {
-    await page.evaluateOnNewDocument(() => {
-      // 开启主动降级
       localStorage.clear();
       localStorage.setItem("preload", "false");
       localStorage.setItem("degrade", "true");
     });
     await page.goto("http://localhost:8000/");
-    await page.waitForNavigation();
   });
 
-  vueMainAppInfoList.forEach((appInfo) =>
+  appInfoList.forEach((appInfo) =>
     it(`${appInfo.name} degrade`, async () => {
-      const appInfoMountedPromise = awaitConsoleLogMessage(page, appInfo.mountedMessage);
+      const mountedPromise = awaitConsoleLogMessage(page, appInfo.mountedMessage);
       await page.click(appInfo.linkSelector);
-      await appInfoMountedPromise;
+      await mountedPromise;
       expect(await getTextContentByJsSelector(page, appInfo.degradeTitleJsSelector)).toBe(appInfo.titleText);
     })
   );
