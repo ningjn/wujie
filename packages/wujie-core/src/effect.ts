@@ -264,25 +264,43 @@ export function deferStyleSheetByHref(opts: {
   }, DEFER_STYLE_HREF_TIMEOUT);
 }
 
-function cssHrefLookupValue(href: string): string {
-  return String(href).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
-}
-
 /**
  * 按绝对 href 查找已转换的样式。
  * 优先匹配动态占位和入口 HTML 写入的 data-wujie-css-href；
  * 没有该属性时，兼容旧的注释形态：style 文本以 `/* href *\/` 开头。
+ *
+ * 查找域既可以是 Document（降级模式的渲染 iframe 文档），
+ * 也可以是 ShadowRoot（shadow-root 模式）——入口 HTML 内联的 style 落在渲染根上。
+ *
+ * 这里刻意不用拼接的 CSS 选择器：href 可能包含换行等非法选择器字符，
+ * querySelector 会抛 SyntaxError，直接打断被劫持的 appendChild 调用栈。
  */
-export function findStyleByCssHref(doc: Document | null, href: string): HTMLStyleElement | null {
+export function findStyleByCssHref(doc: Document | ShadowRoot | null, href: string): HTMLStyleElement | null {
   if (!href || !doc) return null;
-  const marked = doc.querySelector(`style[data-wujie-css-href="${cssHrefLookupValue(href)}"]`);
-  if (marked) return marked as HTMLStyleElement;
   const styles = doc.querySelectorAll("style");
+  for (let i = 0; i < styles.length; i++) {
+    if (styles[i].getAttribute("data-wujie-css-href") === href) return styles[i] as HTMLStyleElement;
+  }
   for (let i = 0; i < styles.length; i++) {
     const text = styles[i].textContent || "";
     if (text.indexOf(`/* ${href} */`) === 0) return styles[i] as HTMLStyleElement;
   }
   return null;
+}
+
+/**
+ * 取插入点所在的渲染根。
+ * - 非降级模式：插入点位于 shadowRoot 内，返回 ShadowRoot
+ * - 降级模式：插入点位于渲染 iframe 的 document 内，返回该 Document
+ * 取不到时（游离节点等）回退到 sandbox iframe 的文档。
+ *
+ * 用 nodeType / host 做鸭子类型判断，避免跨 realm 的 instanceof 问题。
+ */
+function getRenderRoot(insertTarget: Node, fallback: Document): Document | ShadowRoot {
+  const root = insertTarget.getRootNode?.();
+  if (root && (root as ShadowRoot).host) return root as ShadowRoot;
+  if (root && root.nodeType === 9) return root as Document;
+  return fallback;
 }
 
 /**
@@ -343,9 +361,13 @@ function rewriteAppendOrInsertChild(opts: {
             if (!styleHref || exclude) return;
 
             // 入口 HTML 已转成 style，或先前动态插入已占位时，不再插第二份。
+            // 查找域必须是渲染根：入口 HTML 内联的 style 落在渲染根上
+            // （shadow-root 模式是 shadowRoot，降级模式是渲染 iframe 的 document），
+            // 而不是跑 JS 的 sandbox iframe 文档——两者从来不是同一棵树。
             // 仍需对原 link 派发 load，避免 Vite preload 一直等待 stylesheet 的 load 事件；
             // 派发时机见 dispatchStyleSheetLoadAsync。
-            if (findStyleByCssHref(iframeDocument, styleHref)) {
+            const renderRoot = getRenderRoot(this, iframeDocument);
+            if (findStyleByCssHref(renderRoot, styleHref) || findStyleByCssHref(iframeDocument, styleHref)) {
               dispatchStyleSheetLoadAsync(linkElement);
               return;
             }
