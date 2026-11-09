@@ -283,6 +283,9 @@ syncIframeUrlToWindow(iframeWindow);
 
 ### iframe 的 document 改造
 
+> 以下为**简化示例**：省略了「接收者必须是 iframe document」的守卫（`ctx !== iframe.contentDocument`）、
+> 部分选择器特判与错误兜底，完整实现见 `packages/wujie-core/src/proxy.ts`。
+
 ```typescript
 new Proxy(
   {},

@@ -94,6 +94,16 @@ return rawQuerySelectorAll.call(iframe.contentWindow.document, args[0]);
 - 不新增 Entity → Component 的反向依赖
 - 未触碰 `Document.prototype` 的重定义逻辑（属 `iframe.ts` 的 Component 层职责），本变更只改代理的取值行为
 
+## 已知遗留（不在本次范围）
+
+- **`ctx !== iframe.contentDocument` 分支的自递归风险**：当 `ctx` 是 iframe 域内**另一个** Document
+  （例如子应用在 iframe 内 `document.implementation.createHTMLDocument()`）时，
+  `ctx["querySelector"]` 命中被改写的 `Document.prototype` getter → 返回同一个 `proxyDocument[propKey]`
+  → apply 再次以同一 `ctx` 进入 → 无限递归（RangeError）。
+  对 Element 接收者则是正确的（`Element.prototype.querySelector` 未被改写）。
+  该行为在本次改动前后**完全一致**（改动前同样是 `ctx[propKey]?.apply(ctx, args)`），不构成回归；
+  若要修复，应单开变更处理。
+
 ## Risks / Trade-offs
 
 - **[Risk] `querySelectorAll` 回退到 iframe 文档后，子应用会看到 sandbox 注入的 `<base>` 与 loader `<script>`** → 这是上游 `fix/get-script-attrs` 的既定语义（渲染根为空时以 iframe 文档为准），本次不改变回退范围；已在 spec 中以场景形式固化「空结果返回空 NodeList」的契约

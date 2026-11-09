@@ -19,7 +19,12 @@ const { proxyGenerator } = require("../../src/proxy");
  * - iframe.contentWindow.__WUJIE：shadowRoot + proxyLocation
  * - __WUJIE_RAW_DOCUMENT_QUERY_SELECTOR[_ALL]：未被代理的原生实现
  */
-function createProxy(): { iframe: HTMLIFrameElement; shadowRoot: ShadowRoot; proxyDocument: any } {
+function createProxy(): {
+  iframe: HTMLIFrameElement;
+  shadowRoot: ShadowRoot;
+  proxyDocument: any;
+  revoke: () => void;
+} {
   const iframe = document.createElement("iframe");
   document.body.appendChild(iframe);
 
@@ -33,8 +38,8 @@ function createProxy(): { iframe: HTMLIFrameElement; shadowRoot: ShadowRoot; pro
   w.__WUJIE_RAW_DOCUMENT_QUERY_SELECTOR_ALL__ = w.Document.prototype.querySelectorAll;
 
   const anchor = document.createElement("a");
-  const { proxyDocument } = proxyGenerator(iframe, anchor, "http://main/", "http://child/");
-  return { iframe, shadowRoot, proxyDocument: proxyDocument as any };
+  const { proxyDocument, proxyRevoke } = proxyGenerator(iframe, anchor, "http://main/", "http://child/");
+  return { iframe, shadowRoot, proxyDocument: proxyDocument as any, revoke: proxyRevoke };
 }
 
 /** 子应用侧调用 document.querySelectorAll —— this 必须是 iframe 文档 */
@@ -48,12 +53,17 @@ function queryOne(proxyDocument: any, iframe: HTMLIFrameElement, selector: strin
 }
 
 describe("document 代理 / querySelectorAll 始终返回 NodeList", () => {
+  const revokes: Array<() => void> = [];
+
   afterEach(() => {
     document.body.innerHTML = "";
+    revokes.forEach((revoke) => revoke());
+    revokes.length = 0;
   });
 
   it("querySelectorAll('base') 必须返回 NodeList 而非 null", () => {
-    const { iframe, proxyDocument } = createProxy();
+    const { iframe, proxyDocument, revoke } = createProxy();
+    revokes.push(revoke);
 
     const res = queryAll(proxyDocument, iframe, "base");
 
@@ -63,7 +73,8 @@ describe("document 代理 / querySelectorAll 始终返回 NodeList", () => {
   });
 
   it("querySelectorAll('div') 在渲染根与 iframe 文档均无匹配时返回空 NodeList", () => {
-    const { iframe, proxyDocument } = createProxy();
+    const { iframe, proxyDocument, revoke } = createProxy();
+    revokes.push(revoke);
 
     const res = queryAll(proxyDocument, iframe, "div");
 
@@ -72,7 +83,8 @@ describe("document 代理 / querySelectorAll 始终返回 NodeList", () => {
   });
 
   it("渲染根无匹配时，querySelectorAll 仍回退到 iframe 文档的查询结果", () => {
-    const { iframe, proxyDocument } = createProxy();
+    const { iframe, proxyDocument, revoke } = createProxy();
+    revokes.push(revoke);
     // 渲染根内没有 div，iframe 文档里放一个
     (iframe.contentDocument as Document).body.innerHTML = "<div id='in-iframe'></div>";
 
@@ -83,8 +95,25 @@ describe("document 代理 / querySelectorAll 始终返回 NodeList", () => {
     expect(res[0].id).toBe("in-iframe");
   });
 
+  it("渲染根与 iframe 文档都命中时，渲染根优先", () => {
+    const { iframe, shadowRoot, proxyDocument, revoke } = createProxy();
+    revokes.push(revoke);
+    // 两边各放一个 div，渲染根里的应当胜出
+    shadowRoot.innerHTML = "<div id='in-shadow'></div>";
+    (iframe.contentDocument as Document).body.innerHTML = "<div id='in-iframe'></div>";
+
+    const all = queryAll(proxyDocument, iframe, "div");
+    expect(all.length).toBe(1);
+    expect(all[0].id).toBe("in-shadow");
+
+    const one = queryOne(proxyDocument, iframe, "div");
+    expect(one).not.toBeNull();
+    expect(one.id).toBe("in-shadow");
+  });
+
   it("querySelector('base') 在渲染根无匹配时返回 null，且不返回 iframe 文档内的 base", () => {
-    const { iframe, proxyDocument } = createProxy();
+    const { iframe, proxyDocument, revoke } = createProxy();
+    revokes.push(revoke);
     // iframe 文档里存在 base，但子应用不应看到它
     (iframe.contentDocument as Document).head.innerHTML = "<base href='http://child.example.com/' />";
 

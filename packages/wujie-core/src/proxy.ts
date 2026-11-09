@@ -189,7 +189,7 @@ export function proxyGenerator(
               }
               // 优先 shadowDom；空 NodeList 也是 truthy，必须按长度显式判断才能回退
               const shadowResult = target.apply(shadowRoot, args);
-              if (shadowResult && shadowResult.length > 0) return shadowResult;
+              if (shadowResult.length > 0) return shadowResult;
               // "base" 特判不适用于 querySelectorAll：
               // querySelectorAll 的契约是返回 NodeList，返回 null 会让调用方的 .length 直接抛 TypeError
               if (args[0] === "base") return shadowResult;
