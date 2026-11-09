@@ -59,9 +59,11 @@ function createRenderEnv() {
 }
 
 describe("空模板 / 渲染根准备独立于模板内容", () => {
+  let warnSpy: jest.SpyInstance;
+
   beforeEach(() => {
     // 空模板会打 warn，避免污染测试输出
-    jest.spyOn(console, "warn").mockImplementation(() => undefined);
+    warnSpy = jest.spyOn(console, "warn").mockImplementation(() => undefined);
   });
 
   afterEach(() => {
@@ -117,6 +119,67 @@ describe("空模板 / 渲染根准备独立于模板内容", () => {
     expect(shadowRoot.firstElementChild.textContent).toContain("real-content");
   });
 
+  it("空模板会告警，且同一子应用只告警一次", async () => {
+    const { iframeWindow, shadowRoot } = createRenderEnv();
+
+    await renderTemplateToShadowRoot(shadowRoot, iframeWindow, "");
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(String(warnSpy.mock.calls[0][0])).toContain("empty-template-app");
+
+    // 再次空渲染不重复告警（避免每次激活都刷屏）
+    await renderTemplateToShadowRoot(shadowRoot, iframeWindow, "");
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("真实渲染之后再遇空模板：渲染根保留原有内容，head/body 仍有效", async () => {
+    const { iframeWindow, shadowRoot } = createRenderEnv();
+
+    await renderTemplateToShadowRoot(
+      shadowRoot,
+      iframeWindow,
+      "<head><title>t</title></head><body>real-content</body>"
+    );
+    const realHtml = shadowRoot.firstElementChild;
+    const realHead = shadowRoot.head;
+
+    await renderTemplateToShadowRoot(shadowRoot, iframeWindow, "");
+
+    // 不应追加第二个 <html>，也不应把 head 指向空壳
+    expect(shadowRoot.querySelectorAll("html")).toHaveLength(1);
+    expect(shadowRoot.firstElementChild).toBe(realHtml);
+    expect(shadowRoot.head).toBe(realHead);
+    expect(shadowRoot.textContent).toContain("real-content");
+  });
+
+  it("execFlag=true（start 之后再次渲染）时，空模板路径仍能得到有效的 head/body", async () => {
+    const { iframeWindow, sandbox, shadowRoot } = createRenderEnv();
+
+    await renderTemplateToShadowRoot(shadowRoot, iframeWindow, "");
+    sandbox.execFlag = true;
+
+    await renderTemplateToShadowRoot(shadowRoot, iframeWindow, "");
+
+    expect(shadowRoot.head).toBeTruthy();
+    expect(shadowRoot.body).toBeTruthy();
+    expect(sandbox.head).toBe(shadowRoot.head);
+    expect(sandbox.body).toBe(shadowRoot.body);
+  });
+
+  it("模板自身没有 head 时，再次渲染复用同一个 head（锁定 D1 的语义变化）", async () => {
+    const { iframeWindow, sandbox, shadowRoot } = createRenderEnv();
+
+    await renderTemplateToShadowRoot(shadowRoot, iframeWindow, "<head><title>t</title></head><body>first</body>");
+    const firstHead = shadowRoot.head;
+    expect(firstHead).toBeTruthy();
+
+    // start() 之后再次渲染：此时走 !alive && execFlag 的 head/body 复用路径
+    sandbox.execFlag = true;
+    await renderTemplateToShadowRoot(shadowRoot, iframeWindow, "<body>second</body>");
+
+    // 旧 head 被搬进新 html 并保留，而不是被丢弃后换成新的空 head
+    expect(shadowRoot.head).toBe(firstHead);
+  });
+
   it("模板为空时降级渲染：渲染文档不含 undefined 文本，且 head.appendChild 已被劫持", async () => {
     const { iframeWindow, sandbox } = createRenderEnv();
     const renderIframe = document.createElement("iframe");
@@ -127,6 +190,8 @@ describe("空模板 / 渲染根准备独立于模板内容", () => {
 
     expect(renderDocument.documentElement.outerHTML).not.toContain("undefined");
     expect(renderDocument.head).toBeTruthy();
+    // 降级模式仍需完成相对路径基准的注入
+    expect(renderDocument.querySelector("base")).toBeTruthy();
 
     const style = document.createElement("style");
     style.innerHTML = ".hijacked{color:red}";

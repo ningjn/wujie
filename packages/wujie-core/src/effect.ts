@@ -74,7 +74,8 @@ function handleStylesheetElementPatch(stylesheetElement: HTMLStyleElement & { _p
   const patcher = () => {
     const [hostStyleSheetElement, fontStyleSheetElement] = getPatchStyleElements([stylesheetElement.sheet]);
     if (hostStyleSheetElement) {
-      sandbox.shadowRoot.head.appendChild(hostStyleSheetElement);
+      // sandbox 可能在 50ms 防抖期间被销毁，shadowRoot 会置空
+      sandbox.shadowRoot?.head?.appendChild(hostStyleSheetElement);
     }
     if (fontStyleSheetElement) {
       sandbox.inject.fontStyleSheetContainer?.appendChild(fontStyleSheetElement);

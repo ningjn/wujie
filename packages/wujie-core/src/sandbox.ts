@@ -626,21 +626,25 @@ export default class Wujie {
         (styleSheetElement) => styleSheetElement.sheet
       )
     );
+    // attached 表示确实有样式被挂载：只有挂载成功才允许打「已处理」标记，
+    // 否则下次调用会因标记存在而直接返回，:root → :host 的补丁就永久丢了
+    let attached = false;
     if (hostStyleSheetElement) {
       // 渲染根尚未准备好 head 时跳过挂载，避免抛异常（空模板等异常路径）
       const rootHead = this.shadowRoot?.head;
       if (rootHead) {
         rootHead.appendChild(hostStyleSheetElement);
         this.styleSheetElements.push(hostStyleSheetElement);
+        attached = true;
       }
     }
     if (fontStyleSheetElement) {
       this.inject.fontStyleSheetContainer?.appendChild(fontStyleSheetElement);
       fontStyleSheetElement.setAttribute(WUJIE_APP_ID, this.id);
       this.fontStyleSheetElements.push(fontStyleSheetElement);
+      attached = true;
     }
-    (hostStyleSheetElement || fontStyleSheetElement) &&
-      this.shadowRoot.host.setAttribute(WUJIE_DATA_ATTACH_CSS_FLAG, "");
+    attached && this.shadowRoot.host.setAttribute(WUJIE_DATA_ATTACH_CSS_FLAG, "");
   }
 
   /**

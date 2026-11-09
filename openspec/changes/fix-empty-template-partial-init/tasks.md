@@ -33,3 +33,19 @@
 - [x] 5.1 检查 `docs/` 中关于子应用渲染流程的描述，如与 `specs/app-rendering/spec.md` 固化的契约（空模板时渲染根仍完整）有出入则同步修正；验证方式：逐条比对文档与 spec 需求，无出入则记录「无需修改」（结论：无需修改——`docs/guide/information.md` 描述的是「`ShadowRoot` 内部的副作用必须进行处理，主要处理的就是 `shadowRoot` 的 `head` 和 `body`」，这正是本次变更要保证的目标状态：空模板路径下 head/body 引用有效且副作用劫持已安装，文档描述与修复后行为一致）
 - [x] 5.2 运行 `npx eslint --ext .ts packages/wujie-core/src/shadow.ts packages/wujie-core/src/sandbox.ts packages/wujie-core/src/constant.ts`，确认无告警；验证方式：eslint 输出为空
 - [x] 5.3 以中文提交信息按 `<类型>: <简述>` 格式提交本次改动（建议 `fix: 修正空模板场景下渲染根半初始化的问题`）；验证方式：`git log --oneline -1` 显示新提交
+
+## 6. Code Review 反馈修复
+
+- [x] 6.1 （Important 1）`patchCssRules()` 只有在样式**确实挂载成功**时才写 `WUJIE_DATA_ATTACH_CSS_FLAG`：否则标记会让后续调用直接早退，`:root → :host` 补丁永久丢失；验证方式：新增用例断言「host 样式未挂载时不写标记」
+- [x] 6.2 （Important 2）`ensureEmptyRenderRoot` 必须返回**自带 head 与 body** 的 html：多次渲染后旧 html 会变成无 head 的空壳，直接使用会让 `shadowRoot.head` 为 null 并使 `patchRenderEffect` 抛错；验证方式：新增「多次渲染后遇空模板」用例
+- [x] 6.3 （Important 3）空模板告警改为**每个子应用只输出一次**（WeakSet 记录已告警的 sandbox），与 D5 及 spec「输出一次告警」一致；验证方式：新增用例断言二次空渲染不再告警
+- [x] 6.4 （Important 4）修正 design.md 中 D1 的风险描述：补齐 head/body 前移确实改变了「模板自身没有 head」时的 `replaceHeadAndBody` 行为（旧 head 现在会被搬进新 html 并保留内容，更符合既有意图），并补用例锁定该新行为；验证方式：design.md 已修正 + 新增复用同一 head 的用例
+- [x] 6.5 （Important 5）补齐 spec 覆盖缺口：warn 断言 / 真实渲染后再遇空模板 / `execFlag === true` 的空模板路径 / 降级模式 base 注入断言；验证方式：对应用例 PASS
+- [x] 6.6 （Minor 6）空模板路径也给承载内容的 html 应用 `parentNode` / `getBoundingClientRect` 补丁；验证方式：抽出公共 helper `patchShadowHtmlElement`，两条路径共用
+- [x] 6.7 （Minor 7）空模板路径的 head/body 取值与真实路径语义对齐（绑定到所管理的 html 自身的 head/body）
+- [x] 6.8 （Minor 8）修正 design.md 中「patchRenderEffect 两次安装作用于不同元素」的描述：`execFlag === true` 时骨架的 head 就是真实 head，属同一元素
+- [x] 6.9 （Minor 9）空骨架的移除与真实 html 的追加相邻执行（中间不跨 await），避免并发空渲染重新建骨架导致两个 `<html>`；验证方式：既有「空模板后再真实渲染」用例保持 PASS
+- [x] 6.10 （Minor 10）修正 design.md 中 D4 的伪码，使描述与实现一致（`rebuildStyleSheets` 跳过重建但仍调用 `patchCssRules`）
+- [x] 6.11 （Minor 11）`effect.ts` 的 `handleStylesheetElementPatch` 对 `sandbox.shadowRoot?.head` 加守卫，防 sandbox 在防抖期间被销毁后抛错
+- [x] 6.12 修复由 Minor 6 引入的连带问题：`parentNode` 补丁会让 `skeleton.parentNode` 指向 `iframeWindow.document`，`removeEmptyRenderRoot` 改用 `remove()`（走内部父节点，不受补丁影响）；验证方式：空模板→真实渲染用例 PASS
+- [x] 6.13 运行全量单测与集成测试，确认退出码 0；验证方式：jest 输出全部 PASS

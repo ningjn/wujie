@@ -120,13 +120,17 @@ if (bodyElement && body) { /* ...搬运... */ }
 ### D4：`patchCssRules()` 与 `rebuildStyleSheets()` 增加 head/body 缺失守卫
 
 ```ts
-// patchCssRules
+// patchCssRules：只有确实挂载成功才允许打「已处理」标记，
+// 否则下次调用会因标记存在而直接返回，:root → :host 的补丁就永久丢了
 const rootHead = this.shadowRoot?.head;
-if (hostStyleSheetElement && rootHead) { rootHead.appendChild(hostStyleSheetElement); ... }
+if (hostStyleSheetElement && rootHead) { rootHead.appendChild(hostStyleSheetElement); attached = true; }
+attached && this.shadowRoot.host.setAttribute(WUJIE_DATA_ATTACH_CSS_FLAG, "");
 
-// rebuildStyleSheets
+// rebuildStyleSheets：目标 head 缺失时跳过重建（不直接 return），
+// 仍继续调用 patchCssRules，让 :root 补丁有机会被补上
 const target = this.degrade ? this.document?.head : this.shadowRoot?.head;
-if (!target) return;
+if (target && this.styleSheetElements?.length) { /* 重新挂载 */ }
+this.patchCssRules();
 ```
 
 理由：这两处是唯一在渲染层之外直接消费 `shadowRoot.head` 的地方，守卫可把「渲染根不完整」的后果从 TypeError 降级为静默跳过。
@@ -166,8 +170,8 @@ warn(`[wujie] app ${id} template is empty, render root prepared without content`
 
 - **[Risk] 骨架 html 残留在渲染根内（若空模板后再无真实渲染）** → 骨架无内容、无视觉影响（`WUJIE_SHADE_STYLE` 为 `visibility: hidden`）；且 `shadowRoot.head`/`body` 有效，子应用若被插件注入脚本运行，其 `document.head` 可用
 - **[Risk] 移除骨架时误删真实内容** → 移除只针对带 `data-wujie-empty-skeleton` 标记的元素，真实渲染产出的 html 不带该标记
-- **[Risk] `patchRenderEffect` 被安装两次（骨架一次、真实渲染一次）** → 骨架的 head/body 在真实渲染时被移除并替换，劫持随之失效；真实渲染会对新 head/body 重新安装。`patchEventListener` 会重置 `_cacheListeners`，但两次安装作用于不同元素，不会互相清空
-- **[Risk] D1 的顺序调整影响 `replaceHeadAndBody` 的行为** → 补齐在前只会让 `html` 早于原本多出空的 head/body 元素；`replaceHeadAndBody` 随后用旧 head/body 替换它们，最终结果与调整前一致
+- **[Risk] `patchRenderEffect` 被安装两次（骨架一次、真实渲染一次）** → 在 `execFlag === true` 的空模板→真实渲染路径中，骨架的 head **就是**真实 head（被 `replaceHeadAndBody` 搬进新 html），因此两次安装作用于**同一元素**，`patchEventListener` 会重置其 `_cacheListeners`（空模板阶段记录的监听簿记被丢弃）。实际影响很小：`removeEventListener` 仍委托给原生实现，监听本身不会被解绑
+- **[Risk] D1 的顺序调整改变了「模板自身没有 `<head>`」时的 `replaceHeadAndBody` 行为** → 调整前：新 html 没有 head 时 `headElement` 为 null，替换被跳过，旧 head 留在被搬空的旧 html 里，新 html 拿到一个全新的空 head（子应用此前注入到 head 的内容在两次渲染之间丢失，`sandbox.head` 与 `shadowRoot.head` 也发生分叉）；调整后：补齐保证 head 存在，旧 head 会被搬进新 html 并保留其内容。**新行为更符合「head/body 必须一直使用同一个」的既有意图**，但确实是一处语义变化，已由用例 `renderTemplateToHtml` 的 head/body 复用场景锁定
 - **[Trade-off] 多出一个 DOM 标记属性与一段骨架创建/移除逻辑** → 换取渲染根在异常路径下仍可用；相比「整段跳过」更接近「渲染根始终完整」的目标
 
 ## Migration Plan

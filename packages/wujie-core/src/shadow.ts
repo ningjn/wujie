@@ -241,23 +241,73 @@ function renderTemplateToHtml(iframeWindow: Window, template: string): HTMLHtmlE
 }
 
 /**
- * 确保渲染根内存在一个可用的 html（空模板场景）。
- * - 渲染根内已有 html（此前渲染过）→ 直接复用，不追加新节点，避免并存两个 <html>
- * - 否则用既有渲染逻辑产出空骨架，并打上标记，供真实渲染时移除
+ * 给渲染根承载内容的 html 打补丁：
+ * 修复 parentNode 与 getBoundingClientRect（真实渲染路径与空模板路径都需要）
  */
-function ensureEmptyRenderRoot(shadowRoot: ShadowRoot, iframeWindow: Window): HTMLHtmlElement {
-  const existing = shadowRoot.querySelector("html") as HTMLHtmlElement | null;
-  if (existing) return existing;
+function patchShadowHtmlElement(shadowHtml: HTMLElement, iframeWindow: Window): void {
+  Object.defineProperties(shadowHtml, {
+    // 修复 html parentNode
+    parentNode: {
+      enumerable: true,
+      configurable: true,
+      get: () => iframeWindow.document,
+    },
+
+    // 修复 html getBoundingClientRect
+    getBoundingClientRect: {
+      enumerable: true,
+      configurable: true,
+      value: () =>
+        iframeWindow.__WUJIE_RAW_DOCUMENT_QUERY_SELECTOR__.call(iframeWindow.document, "html")!.getBoundingClientRect(),
+    },
+  });
+}
+
+/** 已就空模板告警过的子应用，避免每次激活都重复告警 */
+const emptyTemplateWarned = new WeakSet<Wujie>();
+
+/**
+ * 确保渲染根内存在一个**自带 head 与 body** 的 html（空模板场景）。
+ *
+ * 不能直接取渲染根内的第一个 html：多次渲染后（!alive && execFlag 路径下
+ * replaceHeadAndBody 会把旧 head/body 搬进新 html），旧的 html 会变成无 head 的空壳，
+ * 直接使用会让 shadowRoot.head 变成 null，进而使 patchRenderEffect 抛错。
+ *
+ * @returns html 与 created（本次是否新建了空骨架）
+ */
+function ensureEmptyRenderRoot(
+  shadowRoot: ShadowRoot,
+  iframeWindow: Window
+): { html: HTMLHtmlElement; created: boolean } {
+  const candidates = Array.from(shadowRoot.querySelectorAll("html")) as HTMLHtmlElement[];
+  // 优先复用自带 head/body 的 html（此前真实渲染留下的）
+  const reusable = candidates.find((item) => item.querySelector("head") && item.querySelector("body"));
+  if (reusable) return { html: reusable, created: false };
+
+  // 复用既有的空骨架，避免重复创建
+  const skeleton = shadowRoot.querySelector(`html[${WUJIE_EMPTY_SKELETON_FLAG}]`) as HTMLHtmlElement | null;
+  if (skeleton) {
+    if (!skeleton.querySelector("head")) skeleton.appendChild(skeleton.ownerDocument.createElement("head"));
+    if (!skeleton.querySelector("body")) skeleton.appendChild(skeleton.ownerDocument.createElement("body"));
+    return { html: skeleton, created: false };
+  }
+
   const html = renderTemplateToHtml(iframeWindow, "");
   html.setAttribute(WUJIE_EMPTY_SKELETON_FLAG, "");
   shadowRoot.appendChild(html);
-  return html;
+  return { html, created: true };
 }
 
 /** 移除渲染根内的空骨架（若有） */
 function removeEmptyRenderRoot(shadowRoot: ShadowRoot): void {
   const skeleton = shadowRoot.querySelector(`html[${WUJIE_EMPTY_SKELETON_FLAG}]`);
-  skeleton?.parentNode?.removeChild(skeleton);
+  if (!skeleton) return;
+  /**
+   * 必须用 remove() 而不是 skeleton.parentNode.removeChild(skeleton)：
+   * 空模板路径给 html 打的 parentNode 补丁会把 parentNode 指向 iframeWindow.document，
+   * 用它做 removeChild 的接收者会抛 NotFoundError。remove() 走内部父节点，不受影响。
+   */
+  skeleton.remove();
 }
 
 /**
@@ -280,24 +330,31 @@ export async function renderTemplateToShadowRoot(
    * 真实模板到来时该骨架会被移除，渲染根内不会并存两个 <html>。
    */
   if (!template) {
-    const html = ensureEmptyRenderRoot(shadowRoot, iframeWindow);
-    shadowRoot.head = html.querySelector("head");
-    shadowRoot.body = html.querySelector("body");
+    const { html } = ensureEmptyRenderRoot(shadowRoot, iframeWindow);
+    const head = html.querySelector("head") as HTMLHeadElement;
+    const body = html.querySelector("body") as HTMLBodyElement;
+    shadowRoot.head = head;
+    shadowRoot.body = body;
     const sandbox = iframeWindow.__WUJIE;
-    sandbox.head = shadowRoot.head;
-    sandbox.body = shadowRoot.body;
+    sandbox.head = head;
+    sandbox.body = body;
     patchRenderEffect(shadowRoot, sandbox.id, false);
-    warn(`[wujie] app ${sandbox.id} template is empty, render root prepared without content`);
+    patchShadowHtmlElement(html, iframeWindow);
+    // 每个子应用只告警一次，避免每次激活都刷屏
+    if (!emptyTemplateWarned.has(sandbox)) {
+      emptyTemplateWarned.add(sandbox);
+      warn(`[wujie] app ${sandbox.id} template is empty, render root prepared without content`);
+    }
     return;
   }
-
-  // 真实渲染前移除空骨架，保证渲染根内不会并存两个 <html>，
-  // 也不会让 shadowRoot.head 指向骨架的 head 而与真实内容分离
-  removeEmptyRenderRoot(shadowRoot);
 
   const html = renderTemplateToHtml(iframeWindow, template);
   // 处理 css-before-loader 和 css-after-loader
   const processedHtml = await processCssLoaderForTemplate(iframeWindow.__WUJIE, html);
+  // 移除空骨架与追加真实 html 必须相邻执行（中间不能有 await）：
+  // 否则并发的空渲染会重新创建骨架，导致渲染根内并存两个 <html>、
+  // shadowRoot.firstElementChild 指向空壳
+  removeEmptyRenderRoot(shadowRoot);
   // change ownerDocument
   shadowRoot.appendChild(processedHtml);
   const shade = document.createElement("div");
@@ -307,22 +364,7 @@ export async function renderTemplateToShadowRoot(
   shadowRoot.body = shadowRoot.querySelector("body");
 
   const shadowHtml = shadowRoot.firstElementChild as HTMLElement;
-  Object.defineProperties(shadowHtml, {
-    // 修复 html parentNode
-    parentNode: {
-      enumerable: true,
-      configurable: true,
-      get: () => iframeWindow.document,
-    },
-
-    // 修复 html getBoundingClientRect
-    getBoundingClientRect: {
-      enumerable: true,
-      configurable: true,
-      value: () =>
-        iframeWindow.__WUJIE_RAW_DOCUMENT_QUERY_SELECTOR__.call(iframeWindow.document, "html")!.getBoundingClientRect(),
-    },
-  });
+  patchShadowHtmlElement(shadowHtml, iframeWindow);
 
   patchRenderEffect(shadowRoot, iframeWindow.__WUJIE.id, false);
 }
