@@ -326,8 +326,35 @@ new Proxy(
           },
         });
       }
-      if (propKey === "querySelector" || propKey === "querySelectorAll") {
-        return shadowRoot[propKey].bind(shadowRoot);
+      if (propKey === "querySelector") {
+        // 优先在渲染根内查找，未命中时回退 iframe 文档；
+        // "base" 特判只作用于 querySelector——sandbox 注入的 base 用于修正相对路径解析，不应暴露给子应用
+        return new Proxy(shadowRoot.querySelector, {
+          apply(querySelector, _ctx, args) {
+            const shadowResult = querySelector.call(shadowRoot, args[0]);
+            if (shadowResult) return shadowResult;
+            if (args[0] === "base") return null;
+            return iframe.contentWindow.__WUJIE_RAW_DOCUMENT_QUERY_SELECTOR__.call(
+              iframe.contentWindow.document,
+              args[0]
+            );
+          },
+        });
+      }
+      if (propKey === "querySelectorAll") {
+        // 空 NodeList 也是 truthy，必须按长度显式判断才能回退；
+        // querySelectorAll 的契约是返回 NodeList，任何情况下都不返回 null
+        return new Proxy(shadowRoot.querySelectorAll, {
+          apply(querySelectorAll, _ctx, args) {
+            const shadowResult = querySelectorAll.call(shadowRoot, args[0]);
+            if (shadowResult && shadowResult.length > 0) return shadowResult;
+            if (args[0] === "base") return shadowResult;
+            return iframe.contentWindow.__WUJIE_RAW_DOCUMENT_QUERY_SELECTOR_ALL__.call(
+              iframe.contentWindow.document,
+              args[0]
+            );
+          },
+        });
       }
       if (propKey === "documentElement" || propKey === "scrollingElement") return shadowRoot.firstElementChild;
       if (propKey === "forms") return shadowRoot.querySelectorAll("form");

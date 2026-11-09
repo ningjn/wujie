@@ -162,24 +162,41 @@ export function proxyGenerator(
             },
           });
         }
-        if (propKey === "querySelector" || propKey === "querySelectorAll") {
-          const rawPropMap = {
-            querySelector: "__WUJIE_RAW_DOCUMENT_QUERY_SELECTOR__",
-            querySelectorAll: "__WUJIE_RAW_DOCUMENT_QUERY_SELECTOR_ALL__",
-          };
-          return new Proxy(shadowRoot[propKey], {
+        if (propKey === "querySelector") {
+          return new Proxy(shadowRoot.querySelector, {
             apply(target, ctx, args) {
               if (ctx !== iframe.contentDocument) {
                 return ctx[propKey]?.apply(ctx, args);
               }
-              // 优先 shadowDom；querySelectorAll 的空 NodeList 也是 truthy，需要显式回退到 iframe 文档
+              // 优先 shadowDom，未命中时回退 iframe 文档
               const shadowResult = target.apply(shadowRoot, args);
-              if (shadowResult && (propKey === "querySelector" || (shadowResult as NodeList).length > 0)) {
-                return shadowResult;
+              if (shadowResult) return shadowResult;
+              // "base" 特判只作用于 querySelector：
+              // sandbox 注入的 base 用于修正子应用相对路径解析，不应被子应用看到
+              if (args[0] === "base") return null;
+              return iframe.contentWindow.__WUJIE_RAW_DOCUMENT_QUERY_SELECTOR__.call(
+                iframe.contentWindow.document,
+                args[0]
+              );
+            },
+          });
+        }
+        if (propKey === "querySelectorAll") {
+          return new Proxy(shadowRoot.querySelectorAll, {
+            apply(target, ctx, args) {
+              if (ctx !== iframe.contentDocument) {
+                return ctx[propKey]?.apply(ctx, args);
               }
-              return args[0] === "base"
-                ? null
-                : iframe.contentWindow[rawPropMap[propKey]].call(iframe.contentWindow.document, args[0]);
+              // 优先 shadowDom；空 NodeList 也是 truthy，必须按长度显式判断才能回退
+              const shadowResult = target.apply(shadowRoot, args);
+              if (shadowResult && shadowResult.length > 0) return shadowResult;
+              // "base" 特判不适用于 querySelectorAll：
+              // querySelectorAll 的契约是返回 NodeList，返回 null 会让调用方的 .length 直接抛 TypeError
+              if (args[0] === "base") return shadowResult;
+              return iframe.contentWindow.__WUJIE_RAW_DOCUMENT_QUERY_SELECTOR_ALL__.call(
+                iframe.contentWindow.document,
+                args[0]
+              );
             },
           });
         }
