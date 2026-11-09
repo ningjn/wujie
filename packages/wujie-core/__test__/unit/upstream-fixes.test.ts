@@ -10,22 +10,67 @@ const { clearAssetsCache: coreClearAssetsCache } = require("../../src/index");
 const WujieVue = require("../../../wujie-vue3/index.js").default;
 
 describe("empty template rendering", () => {
+  /**
+   * 空模板现在会走到渲染根准备逻辑，需要一个真实的 __WUJIE sandbox
+   * （旧实现早退在触碰 __WUJIE 之前，所以当时的空 mock 才够用）。
+   */
+  function createIframeWindowMock(): any {
+    const iframe = document.createElement("iframe");
+    document.body.appendChild(iframe);
+    const iframeWindow: any = iframe.contentWindow;
+    iframeWindow.__WUJIE = {
+      id: "empty-template-upstream",
+      url: "http://child.example.com/index.html",
+      alive: false,
+      execFlag: false,
+      head: undefined,
+      body: undefined,
+      plugins: [],
+      replace: (html: string) => html,
+      proxyLocation: new URL("http://child.example.com/index.html"),
+      iframe,
+      fetch: () => Promise.resolve(new Response("")),
+      lifecycles: { loadError: () => undefined },
+      inject: {},
+      degrade: false,
+    };
+    return iframeWindow;
+  }
+
+  beforeEach(() => {
+    jest.spyOn(console, "warn").mockImplementation(() => undefined);
+  });
+
+  afterEach(() => {
+    document.body.innerHTML = "";
+    jest.restoreAllMocks();
+  });
+
   it("does not render literal undefined into shadow root", async () => {
     const host = document.createElement("div");
     document.body.appendChild(host);
     const shadowRoot = host.attachShadow({ mode: "open" });
+    const iframeWindow = createIframeWindowMock();
 
-    await expect(renderTemplateToShadowRoot(shadowRoot, {} as any, "")).resolves.toBeUndefined();
-    expect(shadowRoot.innerHTML).toBe("");
+    await expect(renderTemplateToShadowRoot(shadowRoot, iframeWindow, "")).resolves.toBeUndefined();
+
+    // 上游 PR #1112 的修复意图：不得渲染出字面量 undefined
+    expect(shadowRoot.innerHTML).not.toContain("undefined");
+    // 本次变更后的契约：空模板时渲染根仍保持完整可用
+    // （ShadowRoot.head/body 是 wujie 的全局增强类型，本测试未引入 src/shadow.ts 的类型，故用 any）
+    expect((shadowRoot as any).head).toBeTruthy();
+    expect((shadowRoot as any).body).toBeTruthy();
 
     host.remove();
   });
 
   it("does not render literal undefined into degrade iframe", async () => {
+    const iframeWindow = createIframeWindowMock();
     const renderDocument = document.implementation.createHTMLDocument();
 
-    await expect(renderTemplateToIframe(renderDocument, {} as any, "")).resolves.toBeUndefined();
-    expect(renderDocument.body.innerHTML).toBe("");
+    await expect(renderTemplateToIframe(renderDocument, iframeWindow, "")).resolves.toBeUndefined();
+
+    expect(renderDocument.documentElement.outerHTML).not.toContain("undefined");
   });
 });
 

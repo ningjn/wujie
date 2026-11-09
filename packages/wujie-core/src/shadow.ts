@@ -7,6 +7,7 @@ import {
   LOADING_DATA_FLAG,
   WUJIE_LOADING_STYLE,
   WUJIE_LOADING_SVG,
+  WUJIE_EMPTY_SKELETON_FLAG,
 } from "./constant";
 import {
   getWujieById,
@@ -174,14 +175,15 @@ async function processCssLoaderForTemplate(sandbox: Wujie, html: HTMLHtmlElement
 function replaceHeadAndBody(html: HTMLHtmlElement, head: HTMLHeadElement, body: HTMLBodyElement): HTMLHtmlElement {
   const headElement = html.querySelector("head");
   const bodyElement = html.querySelector("body");
-  if (headElement) {
+  // head/body 缺失时跳过对应替换：sandbox 尚未完成首次渲染时它们可能仍是 undefined
+  if (headElement && head) {
     while (headElement.firstChild) {
       rawAppendChild.call(head, headElement.firstChild.cloneNode(true));
       headElement.removeChild(headElement.firstChild);
     }
     headElement.parentNode.replaceChild(head, headElement);
   }
-  if (bodyElement) {
+  if (bodyElement && body) {
     while (bodyElement.firstChild) {
       rawAppendChild.call(body, bodyElement.firstChild.cloneNode(true));
       bodyElement.removeChild(bodyElement.firstChild);
@@ -209,13 +211,6 @@ function renderTemplateToHtml(iframeWindow: Window, template: string): HTMLHtmlE
   for (let i = 0; i < sourceAttributes.length; i++) {
     html.setAttribute(sourceAttributes[i].name, sourceAttributes[i].value);
   }
-  // 组件多次渲染，head和body必须一直使用同一个来应对被缓存的场景
-  if (!alive && execFlag) {
-    html = replaceHeadAndBody(html, head, body);
-  } else {
-    sandbox.head = html.querySelector("head");
-    sandbox.body = html.querySelector("body");
-  }
   const ElementIterator = document.createTreeWalker(html, NodeFilter.SHOW_ELEMENT, null, false);
   let nextElement = ElementIterator.currentNode as HTMLElement;
   while (nextElement) {
@@ -225,6 +220,8 @@ function renderTemplateToHtml(iframeWindow: Window, template: string): HTMLHtmlE
     if (relativeAttr) nextElement.setAttribute(relativeAttr, getAbsolutePath(url, nextElement.baseURI || ""));
     nextElement = ElementIterator.nextNode() as HTMLElement;
   }
+  // 先补齐 head/body，再决定 sandbox.head / sandbox.body：
+  // 顺序颠倒会让赋值拿到 null，进而使后续 replaceHeadAndBody 拿到空引用
   if (!html.querySelector("head")) {
     const head = document.createElement("head");
     html.appendChild(head);
@@ -233,7 +230,34 @@ function renderTemplateToHtml(iframeWindow: Window, template: string): HTMLHtmlE
     const body = document.createElement("body");
     html.appendChild(body);
   }
+  // 组件多次渲染，head和body必须一直使用同一个来应对被缓存的场景
+  if (!alive && execFlag) {
+    html = replaceHeadAndBody(html, head, body);
+  } else {
+    sandbox.head = html.querySelector("head");
+    sandbox.body = html.querySelector("body");
+  }
   return html;
+}
+
+/**
+ * 确保渲染根内存在一个可用的 html（空模板场景）。
+ * - 渲染根内已有 html（此前渲染过）→ 直接复用，不追加新节点，避免并存两个 <html>
+ * - 否则用既有渲染逻辑产出空骨架，并打上标记，供真实渲染时移除
+ */
+function ensureEmptyRenderRoot(shadowRoot: ShadowRoot, iframeWindow: Window): HTMLHtmlElement {
+  const existing = shadowRoot.querySelector("html") as HTMLHtmlElement | null;
+  if (existing) return existing;
+  const html = renderTemplateToHtml(iframeWindow, "");
+  html.setAttribute(WUJIE_EMPTY_SKELETON_FLAG, "");
+  shadowRoot.appendChild(html);
+  return html;
+}
+
+/** 移除渲染根内的空骨架（若有） */
+function removeEmptyRenderRoot(shadowRoot: ShadowRoot): void {
+  const skeleton = shadowRoot.querySelector(`html[${WUJIE_EMPTY_SKELETON_FLAG}]`);
+  skeleton?.parentNode?.removeChild(skeleton);
 }
 
 /**
@@ -244,11 +268,32 @@ export async function renderTemplateToShadowRoot(
   iframeWindow: Window,
   template: string
 ): Promise<void> {
-  // 并发 startApp（如 React StrictMode 双挂载）竞态下 template 可能为空。
-  // 若继续渲染，DOMParser.parseFromString(undefined) 与 html.innerHTML = undefined
-  // 都会把字面量 "undefined" 渲染进 shadowRoot，表现为首次加载闪现 undefined 文本。
-  // 这里直接跳过，等真实模板 active 时会重新渲染。
-  if (!template) return;
+  /**
+   * 模板为空时不渲染任何内容，但渲染根必须保持可用。
+   *
+   * 上游 PR #1112 在这里直接 return，把「渲染根准备」也一起跳过了，导致
+   * shadowRoot.head / shadowRoot.body 始终是 undefined：子应用侧 document.head 为 undefined、
+   * patchRenderEffect 未安装（动态注入的样式/脚本不被接管）、
+   * sandbox.head / sandbox.body 也为空（后续 replaceHeadAndBody 会拿到空引用）。
+   *
+   * 这里改为只准备一个空骨架（html > head + body）并完成渲染根的准备动作；
+   * 真实模板到来时该骨架会被移除，渲染根内不会并存两个 <html>。
+   */
+  if (!template) {
+    const html = ensureEmptyRenderRoot(shadowRoot, iframeWindow);
+    shadowRoot.head = html.querySelector("head");
+    shadowRoot.body = html.querySelector("body");
+    const sandbox = iframeWindow.__WUJIE;
+    sandbox.head = shadowRoot.head;
+    sandbox.body = shadowRoot.body;
+    patchRenderEffect(shadowRoot, sandbox.id, false);
+    warn(`[wujie] app ${sandbox.id} template is empty, render root prepared without content`);
+    return;
+  }
+
+  // 真实渲染前移除空骨架，保证渲染根内不会并存两个 <html>，
+  // 也不会让 shadowRoot.head 指向骨架的 head 而与真实内容分离
+  removeEmptyRenderRoot(shadowRoot);
 
   const html = renderTemplateToHtml(iframeWindow, template);
   // 处理 css-before-loader 和 css-after-loader
@@ -301,11 +346,13 @@ export async function renderTemplateToIframe(
   iframeWindow: Window,
   template: string
 ): Promise<void> {
-  // 同 renderTemplateToShadowRoot：空 template 直接跳过，避免降级渲染把 "undefined" 写入 iframe document
-  if (!template) return;
+  // 空模板以空字符串兜底：renderTemplateToHtml 会产出空骨架（html > head + body），
+  // 从而让 initBase 与 patchRenderEffect 正常执行，同时不会把 "undefined" 写进渲染文档。
+  // 降级模式用 replaceChild 替换 documentElement，不存在并存两个 <html> 的问题。
+  const safeTemplate = template ?? "";
 
   // 插入template
-  const html = renderTemplateToHtml(iframeWindow, template);
+  const html = renderTemplateToHtml(iframeWindow, safeTemplate);
   // 处理 css-before-loader 和 css-after-loader
   const processedHtml = await processCssLoaderForTemplate(iframeWindow.__WUJIE, html);
   renderDocument.replaceChild(processedHtml, renderDocument.documentElement);

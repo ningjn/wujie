@@ -6,6 +6,8 @@ export const CONTAINER_POSITION_DATA_FLAG = "data-container-position-flag";
 export const CONTAINER_OVERFLOW_DATA_FLAG = "data-container-overflow-flag";
 export const LOADING_DATA_FLAG = "data-loading-flag";
 export const WUJIE_DATA_ATTACH_CSS_FLAG = "data-wujie-attach-css-flag";
+// 空模板时渲染根内的占位骨架标记：真实模板到来前渲染根保持可用，真实渲染时该骨架被移除
+export const WUJIE_EMPTY_SKELETON_FLAG = "data-wujie-empty-skeleton";
 export const WUJIE_FONT_STYLE_CONTAINER_ATTR = "data-wujie-font-style-container";
 
 // 需要使用的某些固定变量

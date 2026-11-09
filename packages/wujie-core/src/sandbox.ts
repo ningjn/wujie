@@ -603,9 +603,11 @@ export default class Wujie {
 
   /** 当子应用再次激活后，只运行mount函数，样式需要重新恢复 */
   public rebuildStyleSheets(): void {
-    if (this.styleSheetElements && this.styleSheetElements.length) {
+    // 渲染根尚未准备好 head 时直接跳过重建，避免抛异常（空模板等异常路径）
+    const target = this.degrade ? this.document?.head : this.shadowRoot?.head;
+    if (target && this.styleSheetElements && this.styleSheetElements.length) {
       this.styleSheetElements.forEach((styleSheetElement) => {
-        rawElementAppendChild.call(this.degrade ? this.document.head : this.shadowRoot.head, styleSheetElement);
+        rawElementAppendChild.call(target, styleSheetElement);
       });
     }
     this.patchCssRules();
@@ -625,8 +627,12 @@ export default class Wujie {
       )
     );
     if (hostStyleSheetElement) {
-      this.shadowRoot.head.appendChild(hostStyleSheetElement);
-      this.styleSheetElements.push(hostStyleSheetElement);
+      // 渲染根尚未准备好 head 时跳过挂载，避免抛异常（空模板等异常路径）
+      const rootHead = this.shadowRoot?.head;
+      if (rootHead) {
+        rootHead.appendChild(hostStyleSheetElement);
+        this.styleSheetElements.push(hostStyleSheetElement);
+      }
     }
     if (fontStyleSheetElement) {
       this.inject.fontStyleSheetContainer?.appendChild(fontStyleSheetElement);
