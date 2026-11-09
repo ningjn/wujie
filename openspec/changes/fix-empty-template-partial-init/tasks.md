@@ -49,3 +49,13 @@
 - [x] 6.11 （Minor 11）`effect.ts` 的 `handleStylesheetElementPatch` 对 `sandbox.shadowRoot?.head` 加守卫，防 sandbox 在防抖期间被销毁后抛错
 - [x] 6.12 修复由 Minor 6 引入的连带问题：`parentNode` 补丁会让 `skeleton.parentNode` 指向 `iframeWindow.document`，`removeEmptyRenderRoot` 改用 `remove()`（走内部父节点，不受补丁影响）；验证方式：空模板→真实渲染用例 PASS
 - [x] 6.13 运行全量单测与集成测试，确认退出码 0；验证方式：jest 输出全部 PASS
+
+## 7. Code Review 复审反馈处理
+
+- [x] 7.1 （Important A）补上 tasks.md 6.1 声称存在但实际缺失的断言：「渲染根无 head、host 样式未挂载时不得写 `WUJIE_DATA_ATTACH_CSS_FLAG`」，并补一条「head 存在且挂载成功时应写标记」的对照用例；验证方式：回退 `sandbox.ts` 到基线版本时这两条用例必须失败（已实测：基线下 3 条失败 / 修复后全绿）
+- [x] 7.2 （Minor 1/2）`patchCssRules()` 的标记语义细化为 `attached`（本次确实挂载）与 `pending`（仍有可重试的待办补丁）：host 因缺 head 被跳过时算 pending，font 容器缺失时不算 pending；验证方式：7.1 的两条断言 + 全量单测
+- [x] 7.3 （Minor 3）删除 `ensureEmptyRenderRoot` 返回值中未被使用的 `created` 字段（告警改由 WeakSet 判定）；验证方式：`tsc` 编译通过且无未使用变量
+- [x] 7.4 （Minor 4/5）更新 design.md：D2 补充空骨架的三分支选择规则、「空模板不清空既有渲染内容」、骨架移除与追加必须相邻、两条路径 head/body 取值对称；D4 伪码补充 `pending` 语义；D5 括注改为「以 sandbox 实例为键告警一次」
+- [x] 7.5 （Minor 6）真实渲染路径的 `shadowRoot.head/body` 改为取承载内容的 html 自身的 head/body，与空模板路径对称（多次渲染后渲染根内可能残留旧 html，渲染根范围的 querySelector 会取到过期的 head）；验证方式：新增「重复渲染后 shadowRoot.head 与 sandbox.head 指向同一元素」用例
+- [x] 7.6 修正 mock：`getPatchStyleElements` 依赖 `style.sheet`（CSSOM），jsdom 只有元素真正位于文档中时才有 sheet，`createHTMLDocument()` 里的 style 没有 sheet 会让用例退化；验证方式：7.1 的断言在基线实现下确实失败
+- [x] 7.7 运行全量单测与集成测试，确认退出码 0；验证方式：jest 输出全部 PASS

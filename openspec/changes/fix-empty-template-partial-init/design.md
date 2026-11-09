@@ -79,7 +79,27 @@ else { sandbox.head = html.querySelector("head"); sandbox.body = html.querySelec
 
 这是**纯顺序调整**，不改变任何分支的取值语义，但保证 `sandbox.head` / `sandbox.body` 永远指向真实元素而不是 `null`。
 
-### D2：空模板走「带标记的空骨架」，真实渲染前移除
+### D2：空模板走「空骨架」，真实渲染前移除
+
+空模板时 `ensureEmptyRenderRoot` 按以下顺序挑选承载 html：
+
+1. 渲染根内**已有自带 head 与 body 的 html**（此前真实渲染留下的）→ 直接复用，
+   **不新建骨架、也不打标记**：此时渲染根保留原有内容，旧 UI 继续显示（空模板不会清空既有渲染内容）；
+   后续真实渲染时 `removeEmptyRenderRoot` 是 no-op（没有骨架可移除）
+2. 否则复用**既有的带标记空骨架**（补齐缺失的 head/body）
+3. 否则新建一个带 `WUJIE_EMPTY_SKELETON_FLAG` 标记的空骨架
+
+不能简单地取渲染根内的第一个 html：多次渲染后（`!alive && execFlag` 路径下
+`replaceHeadAndBody` 会把旧 head/body 搬进新 html），旧的 html 会变成无 head 的空壳，
+直接使用会让 `shadowRoot.head` 变成 null，进而使 `patchRenderEffect` 抛错。
+
+**真实渲染时移除骨架与追加真实 html 必须相邻执行**（中间不跨 await）：
+否则并发的空渲染会重新创建骨架，导致渲染根内并存两个 `<html>`、`shadowRoot.firstElementChild` 指向空壳。
+
+**两条路径的 head/body 取值保持对称**：都取「承载内容的 html 自身的 head/body」，
+而不是渲染根范围内的第一个 head（多次渲染后渲染根内可能残留旧 html，取到的会是过期的 head）。
+
+原 D2：空模板走「带标记的空骨架」，真实渲染前移除
 
 空模板时不直接 `return`，而是准备一个**最小骨架**并打上标记：
 
@@ -120,11 +140,20 @@ if (bodyElement && body) { /* ...搬运... */ }
 ### D4：`patchCssRules()` 与 `rebuildStyleSheets()` 增加 head/body 缺失守卫
 
 ```ts
-// patchCssRules：只有确实挂载成功才允许打「已处理」标记，
-// 否则下次调用会因标记存在而直接返回，:root → :host 的补丁就永久丢了
+// patchCssRules：attached 表示本次确实挂载了样式，pending 表示仍有补丁待补（且重试有意义）。
+// 只有「既挂载成功、又没有任何待办补丁」时才允许打「已处理」标记，
+// 否则下次调用会因标记存在而直接早退，:root → :host 的补丁就永久丢了。
 const rootHead = this.shadowRoot?.head;
-if (hostStyleSheetElement && rootHead) { rootHead.appendChild(hostStyleSheetElement); attached = true; }
-attached && this.shadowRoot.host.setAttribute(WUJIE_DATA_ATTACH_CSS_FLAG, "");
+if (hostStyleSheetElement) {
+  if (rootHead) { rootHead.appendChild(hostStyleSheetElement); attached = true; }
+  else pending = true;            // head 之后可能被补上 → 允许下次重试
+}
+if (fontStyleSheetElement && this.inject.fontStyleSheetContainer) {
+  this.inject.fontStyleSheetContainer.appendChild(fontStyleSheetElement);
+  attached = true;
+  // 容器缺失时无处可挂、重试也无意义 → 不算 pending
+}
+(attached && !pending) && this.shadowRoot.host.setAttribute(WUJIE_DATA_ATTACH_CSS_FLAG, "");
 
 // rebuildStyleSheets：目标 head 缺失时跳过重建（不直接 return），
 // 仍继续调用 patchCssRules，让 :root 补丁有机会被补上
@@ -141,7 +170,7 @@ this.patchCssRules();
 warn(`[wujie] app ${id} template is empty, render root prepared without content`);
 ```
 
-理由：上游 PR #1112 把「模板为空」这一异常状态变成了静默行为，排障时无从察觉。告警只输出一次（骨架已存在则不重复输出）。
+理由：上游 PR #1112 把「模板为空」这一异常状态变成了静默行为，排障时无从察觉。告警只输出一次（以 sandbox 实例为键记录，与骨架是否存在无关）。
 
 ### D6：降级模式不需要骨架
 

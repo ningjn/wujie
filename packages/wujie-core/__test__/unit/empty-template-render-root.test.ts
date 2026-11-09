@@ -165,6 +165,16 @@ describe("空模板 / 渲染根准备独立于模板内容", () => {
     expect(sandbox.body).toBe(shadowRoot.body);
   });
 
+  it("重复渲染后 shadowRoot.head 与 sandbox.head 指向同一个元素", async () => {
+    const { iframeWindow, sandbox, shadowRoot } = createRenderEnv();
+
+    await renderTemplateToShadowRoot(shadowRoot, iframeWindow, "<head><title>t</title></head><body>a</body>");
+    await renderTemplateToShadowRoot(shadowRoot, iframeWindow, "<head><title>t2</title></head><body>b</body>");
+
+    expect(shadowRoot.head).toBe(sandbox.head);
+    expect(shadowRoot.body).toBe(sandbox.body);
+  });
+
   it("模板自身没有 head 时，再次渲染复用同一个 head（锁定 D1 的语义变化）", async () => {
     const { iframeWindow, sandbox, shadowRoot } = createRenderEnv();
 
@@ -205,22 +215,28 @@ describe("空模板 / 渲染根准备独立于模板内容", () => {
 describe("渲染根不完整时的防御性守卫", () => {
   afterEach(() => {
     document.body.innerHTML = "";
+    document.head.innerHTML = "";
     jest.restoreAllMocks();
   });
 
-  /** 构造一个「渲染根没有 head」的 sandbox 替身 */
+  /**
+   * 构造一个「渲染根没有 head」的 sandbox 替身。
+   *
+   * 注意：jsdom 只有元素**真正位于文档中**时才会给出 style.sheet（CSSOM），
+   * createHTMLDocument() 里的 style 没有 sheet，getPatchStyleElements 提取不到 :root 规则，
+   * 用例就退化成了「什么都没发生」，无法区分新旧实现。
+   */
   function createIncompleteSandbox(): any {
-    const iframeDocument = document.implementation.createHTMLDocument("");
-    // 带一条 :root 规则，尽量命中 host 样式提取分支
-    const style = iframeDocument.createElement("style");
+    // 带一条 :root 规则，命中 host 样式提取分支
+    const style = document.createElement("style");
     style.textContent = ":root{color:red}";
-    iframeDocument.head.appendChild(style);
+    document.head.appendChild(style);
 
     return {
       id: "incomplete-root-app",
       degrade: false,
       shadowRoot: { host: document.createElement("div") }, // 故意没有 head / body
-      iframe: { contentDocument: iframeDocument },
+      iframe: { contentDocument: document },
       styleSheetElements: [],
       inject: {},
       // rebuildStyleSheets 内部会调用它，挂真实实现以便守卫一起被验证
@@ -231,6 +247,23 @@ describe("渲染根不完整时的防御性守卫", () => {
   it("渲染根无 head 时调用 patchCssRules 不抛异常", () => {
     const sandbox = createIncompleteSandbox();
     expect(() => Wujie.prototype.patchCssRules.call(sandbox)).not.toThrow();
+  });
+
+  it("渲染根无 head、host 样式未挂载时不得写「已处理」标记（否则 :root → :host 补丁永久丢失）", () => {
+    const sandbox = createIncompleteSandbox();
+
+    Wujie.prototype.patchCssRules.call(sandbox);
+
+    expect(sandbox.shadowRoot.host.hasAttribute("data-wujie-attach-css-flag")).toBe(false);
+  });
+
+  it("渲染根有 head、host 样式挂载成功时应写「已处理」标记", () => {
+    const sandbox = createIncompleteSandbox();
+    sandbox.shadowRoot.head = document.createElement("head");
+
+    Wujie.prototype.patchCssRules.call(sandbox);
+
+    expect(sandbox.shadowRoot.host.hasAttribute("data-wujie-attach-css-flag")).toBe(true);
   });
 
   it("渲染根无 head 时调用 rebuildStyleSheets 不抛异常", () => {

@@ -273,29 +273,25 @@ const emptyTemplateWarned = new WeakSet<Wujie>();
  * replaceHeadAndBody 会把旧 head/body 搬进新 html），旧的 html 会变成无 head 的空壳，
  * 直接使用会让 shadowRoot.head 变成 null，进而使 patchRenderEffect 抛错。
  *
- * @returns html 与 created（本次是否新建了空骨架）
  */
-function ensureEmptyRenderRoot(
-  shadowRoot: ShadowRoot,
-  iframeWindow: Window
-): { html: HTMLHtmlElement; created: boolean } {
+function ensureEmptyRenderRoot(shadowRoot: ShadowRoot, iframeWindow: Window): HTMLHtmlElement {
   const candidates = Array.from(shadowRoot.querySelectorAll("html")) as HTMLHtmlElement[];
   // 优先复用自带 head/body 的 html（此前真实渲染留下的）
   const reusable = candidates.find((item) => item.querySelector("head") && item.querySelector("body"));
-  if (reusable) return { html: reusable, created: false };
+  if (reusable) return reusable;
 
   // 复用既有的空骨架，避免重复创建
   const skeleton = shadowRoot.querySelector(`html[${WUJIE_EMPTY_SKELETON_FLAG}]`) as HTMLHtmlElement | null;
   if (skeleton) {
     if (!skeleton.querySelector("head")) skeleton.appendChild(skeleton.ownerDocument.createElement("head"));
     if (!skeleton.querySelector("body")) skeleton.appendChild(skeleton.ownerDocument.createElement("body"));
-    return { html: skeleton, created: false };
+    return skeleton;
   }
 
   const html = renderTemplateToHtml(iframeWindow, "");
   html.setAttribute(WUJIE_EMPTY_SKELETON_FLAG, "");
   shadowRoot.appendChild(html);
-  return { html, created: true };
+  return html;
 }
 
 /** 移除渲染根内的空骨架（若有） */
@@ -330,7 +326,7 @@ export async function renderTemplateToShadowRoot(
    * 真实模板到来时该骨架会被移除，渲染根内不会并存两个 <html>。
    */
   if (!template) {
-    const { html } = ensureEmptyRenderRoot(shadowRoot, iframeWindow);
+    const html = ensureEmptyRenderRoot(shadowRoot, iframeWindow);
     const head = html.querySelector("head") as HTMLHeadElement;
     const body = html.querySelector("body") as HTMLBodyElement;
     shadowRoot.head = head;
@@ -360,8 +356,10 @@ export async function renderTemplateToShadowRoot(
   const shade = document.createElement("div");
   shade.setAttribute("style", WUJIE_SHADE_STYLE);
   processedHtml.insertBefore(shade, processedHtml.firstChild);
-  shadowRoot.head = shadowRoot.querySelector("head");
-  shadowRoot.body = shadowRoot.querySelector("body");
+  // 取承载内容的 html 自身的 head/body（与空模板路径对称）：
+  // 多次渲染后渲染根内可能残留旧的 html，用渲染根范围的 querySelector 会取到过期的 head
+  shadowRoot.head = processedHtml.querySelector("head") as HTMLHeadElement;
+  shadowRoot.body = processedHtml.querySelector("body") as HTMLBodyElement;
 
   const shadowHtml = shadowRoot.firstElementChild as HTMLElement;
   patchShadowHtmlElement(shadowHtml, iframeWindow);
