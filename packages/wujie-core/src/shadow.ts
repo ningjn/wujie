@@ -276,9 +276,13 @@ const emptyTemplateWarned = new WeakSet<Wujie>();
  */
 function ensureEmptyRenderRoot(shadowRoot: ShadowRoot, iframeWindow: Window): HTMLHtmlElement {
   const candidates = Array.from(shadowRoot.querySelectorAll("html")) as HTMLHtmlElement[];
-  // 优先复用自带 head/body 的 html（此前真实渲染留下的）
-  const reusable = candidates.find((item) => item.querySelector("head") && item.querySelector("body"));
-  if (reusable) return reusable;
+  // 优先复用自带 head/body 的 html（此前真实渲染留下的）：
+  // 取**最后一个**而不是第一个 —— 真实渲染路径每次都追加新 html，
+  // 最早那个 html 的 head 可能是过期的（与真实路径取「刚 append 的那个」保持对称）
+  for (let i = candidates.length - 1; i >= 0; i--) {
+    const item = candidates[i];
+    if (item.querySelector("head") && item.querySelector("body")) return item;
+  }
 
   // 复用既有的空骨架，避免重复创建
   const skeleton = shadowRoot.querySelector(`html[${WUJIE_EMPTY_SKELETON_FLAG}]`) as HTMLHtmlElement | null;

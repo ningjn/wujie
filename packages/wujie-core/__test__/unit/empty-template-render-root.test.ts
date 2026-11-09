@@ -238,6 +238,7 @@ describe("渲染根不完整时的防御性守卫", () => {
       shadowRoot: { host: document.createElement("div") }, // 故意没有 head / body
       iframe: { contentDocument: document },
       styleSheetElements: [],
+      fontStyleSheetElements: [],
       inject: {},
       // rebuildStyleSheets 内部会调用它，挂真实实现以便守卫一起被验证
       patchCssRules: Wujie.prototype.patchCssRules,
@@ -251,6 +252,32 @@ describe("渲染根不完整时的防御性守卫", () => {
 
   it("渲染根无 head、host 样式未挂载时不得写「已处理」标记（否则 :root → :host 补丁永久丢失）", () => {
     const sandbox = createIncompleteSandbox();
+
+    Wujie.prototype.patchCssRules.call(sandbox);
+
+    expect(sandbox.shadowRoot.host.hasAttribute("data-wujie-attach-css-flag")).toBe(false);
+  });
+
+  it("host 样式未挂载但 font 样式已挂载时，也不得写「已处理」标记", () => {
+    const sandbox = createIncompleteSandbox();
+    // 加一条 @font-face 规则命中 font 分支，并提供 font 容器让它能真正挂载
+    const fontStyle = document.createElement("style");
+    fontStyle.textContent = "@font-face{font-family:'probe';src:url(./probe.woff)}";
+    document.head.appendChild(fontStyle);
+    sandbox.inject = { fontStyleSheetContainer: document.createElement("div") };
+
+    Wujie.prototype.patchCssRules.call(sandbox);
+
+    // host 因缺 head 被跳过 → 仍有待办补丁 → 不得写标记，否则 :root → :host 补丁永久丢失
+    expect(sandbox.shadowRoot.host.hasAttribute("data-wujie-attach-css-flag")).toBe(false);
+  });
+
+  it("font 容器缺失时不算待办（无处可挂，重试无意义）", () => {
+    const sandbox = createIncompleteSandbox();
+    const fontStyle = document.createElement("style");
+    fontStyle.textContent = "@font-face{font-family:'probe2';src:url(./probe2.woff)}";
+    document.head.appendChild(fontStyle);
+    // inject 为 {} → 无 font 容器
 
     Wujie.prototype.patchCssRules.call(sandbox);
 

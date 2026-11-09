@@ -620,15 +620,21 @@ export default class Wujie {
    */
   public patchCssRules(): void {
     if (this.degrade) return;
+    // sandbox 销毁后 shadowRoot 会置空
+    if (!this.shadowRoot) return;
     if (this.shadowRoot.host.hasAttribute(WUJIE_DATA_ATTACH_CSS_FLAG)) return;
     const [hostStyleSheetElement, fontStyleSheetElement] = getPatchStyleElements(
       Array.from(this.iframe.contentDocument.querySelectorAll("style")).map(
         (styleSheetElement) => styleSheetElement.sheet
       )
     );
-    // attached 表示确实有样式被挂载：只有挂载成功才允许打「已处理」标记，
-    // 否则下次调用会因标记存在而直接返回，:root → :host 的补丁就永久丢了
+    /**
+     * attached 表示本次确实挂载了样式；pending 表示仍有补丁待补（且重试有意义）。
+     * 只有「既挂载成功、又没有任何待办补丁」时才允许打「已处理」标记：
+     * 否则下次调用会因标记存在而直接早退，:root → :host 的补丁就永久丢了。
+     */
     let attached = false;
+    let pending = false;
     if (hostStyleSheetElement) {
       // 渲染根尚未准备好 head 时跳过挂载，避免抛异常（空模板等异常路径）
       const rootHead = this.shadowRoot?.head;
@@ -636,15 +642,22 @@ export default class Wujie {
         rootHead.appendChild(hostStyleSheetElement);
         this.styleSheetElements.push(hostStyleSheetElement);
         attached = true;
+      } else {
+        // head 之后可能会被补上 → 视为待办，允许下次重试
+        pending = true;
       }
     }
     if (fontStyleSheetElement) {
-      this.inject.fontStyleSheetContainer?.appendChild(fontStyleSheetElement);
-      fontStyleSheetElement.setAttribute(WUJIE_APP_ID, this.id);
-      this.fontStyleSheetElements.push(fontStyleSheetElement);
-      attached = true;
+      const fontContainer = this.inject.fontStyleSheetContainer;
+      if (fontContainer) {
+        fontContainer.appendChild(fontStyleSheetElement);
+        fontStyleSheetElement.setAttribute(WUJIE_APP_ID, this.id);
+        this.fontStyleSheetElements.push(fontStyleSheetElement);
+        attached = true;
+      }
+      // 容器缺失时无处可挂，重试也无意义 → 不算待办
     }
-    attached && this.shadowRoot.host.setAttribute(WUJIE_DATA_ATTACH_CSS_FLAG, "");
+    attached && !pending && this.shadowRoot.host.setAttribute(WUJIE_DATA_ATTACH_CSS_FLAG, "");
   }
 
   /**

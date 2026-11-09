@@ -59,3 +59,18 @@
 - [x] 7.5 （Minor 6）真实渲染路径的 `shadowRoot.head/body` 改为取承载内容的 html 自身的 head/body，与空模板路径对称（多次渲染后渲染根内可能残留旧 html，渲染根范围的 querySelector 会取到过期的 head）；验证方式：新增「重复渲染后 shadowRoot.head 与 sandbox.head 指向同一元素」用例
 - [x] 7.6 修正 mock：`getPatchStyleElements` 依赖 `style.sheet`（CSSOM），jsdom 只有元素真正位于文档中时才有 sheet，`createHTMLDocument()` 里的 style 没有 sheet 会让用例退化；验证方式：7.1 的断言在基线实现下确实失败
 - [x] 7.7 运行全量单测与集成测试，确认退出码 0；验证方式：jest 输出全部 PASS
+
+## 8. Code Review 二次复审反馈处理
+
+> 背景：第 7 组声称已实现的 `pending` 语义**实际只写进了 design.md 与 tasks.md，没有进入代码**——
+> 原因是验证 RED 时用了 `git checkout HEAD -- <file>` 恢复，该命令会丢弃未提交的改动。
+> 本组改用 `git stash` 安全保存/恢复，并逐条核对「代码确实包含制品所声称的语义」。
+
+- [x] 8.1 （Important 2 / Minor 1）`patchCssRules()` 落实 `pending` 语义：host 因缺 `shadowRoot.head` 被跳过时置 `pending = true`，标记不再写入，`:root → :host` 补丁得以在后续重试；验证方式：用例「host 样式未挂载但 font 样式已挂载时，也不得写标记」在 31f9ed9 下失败（已实测 2 failed）、本轮修复后 PASS
+- [x] 8.2 （Minor 2）font 分支改为「容器存在才挂载并置 attached」：容器缺失时静默空转不再被算作「已挂载」，且因无处可挂、重试无意义而不计入 pending；验证方式：用例「font 容器缺失时不算待办」在 31f9ed9 下失败（已实测）、本轮修复后 PASS
+- [x] 8.3 补 `if (!this.shadowRoot) return;` 守卫（sandbox 销毁后 shadowRoot 会被置空）
+- [x] 8.4 （Minor 3）空模板路径选择承载 html 时改为取**最后一个**自带 head/body 的 html，与真实路径「取刚 append 的那个」真正对称；验证方式：全量单测通过
+- [x] 8.5 （Minor 4）补 font 分支用例：混合场景（host 未挂载 + font 已挂载）与 font 容器缺失两个场景各一条
+- [x] 8.6 （Minor 5）删除 design.md D2 中已被本轮改动证伪的旧段落（「渲染根内始终只有一个 `<html>`」「`shadowRoot.querySelector("head")` 指向真实 head」），避免制品与代码互相矛盾
+- [x] 8.7 mock 补 `fontStyleSheetElements` 字段（真实 WuJie 实例有该字段，缺失会让 font 分支抛错）
+- [x] 8.8 运行全量单测与集成测试，确认退出码 0；验证方式：jest 输出全部 PASS

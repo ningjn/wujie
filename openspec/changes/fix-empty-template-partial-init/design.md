@@ -99,9 +99,7 @@ else { sandbox.head = html.querySelector("head"); sandbox.body = html.querySelec
 **两条路径的 head/body 取值保持对称**：都取「承载内容的 html 自身的 head/body」，
 而不是渲染根范围内的第一个 head（多次渲染后渲染根内可能残留旧 html，取到的会是过期的 head）。
 
-原 D2：空模板走「带标记的空骨架」，真实渲染前移除
-
-空模板时不直接 `return`，而是准备一个**最小骨架**并打上标记：
+空模板时不直接 `return`，而是准备一个**最小骨架**：
 
 ```
 shadowRoot
@@ -112,10 +110,10 @@ shadowRoot
 
 骨架创建时同步完成：`shadowRoot.head`/`shadowRoot.body` 赋值、`sandbox.head`/`sandbox.body` 赋值、`patchRenderEffect(shadowRoot, id, false)` 安装。
 
-真实渲染（模板非空）时，**先移除骨架再 append 真实 html**，从而保证：
+真实渲染（模板非空）时，**移除骨架与 append 真实 html 相邻执行**，从而保证：
 
-- 渲染根内始终只有一个 `<html>`，`shadowRoot.firstElementChild` 指向内容承载元素
-- `shadowRoot.querySelector("head")` 指向真实 head
+- 「空骨架 → 真实渲染」这条路径下渲染根内只有一个 `<html>`，`shadowRoot.firstElementChild` 指向内容承载元素
+- 承载内容的 head/body 取自**刚 append 的那个 html 自身**，而不是渲染根范围内的第一个 head
 
 **为什么需要标记**：仅靠「移除渲染根内所有 `<html>`」无法区分「空骨架」与「上一次真实渲染的残留 html」（后者在 `!alive && execFlag` 的复用路径中是允许存在的）。用 DOM 属性标记可精确识别、精确移除。
 
