@@ -106,7 +106,12 @@ async function getEmbedHTML(template, styleResultList: StyleResultList): Promise
         if (styleResult.src) {
           embedHTML = embedHTML.replace(
             genLinkReplaceSymbol(styleResult.src),
-            styleResult.ignore
+            /**
+             * 内容为空说明 CSS 没有加载成功（fetchAssets 对 cssFlag 的失败路径 resolve 成 ""）。
+             * 此时不能输出带去重标记的 style：它会被去重查询命中，
+             * 使该地址既无法内联也无法重试。保留原始 link 交给浏览器自行加载/重试。
+             */
+            styleResult.ignore || !content
               ? `<link href="${styleResult.src}" rel="stylesheet" type="text/css">`
               : `<style data-wujie-css-href="${styleResult.src}">/* ${styleResult.src} */${content}</style>`
           );

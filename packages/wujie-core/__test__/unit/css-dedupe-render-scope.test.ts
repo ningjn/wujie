@@ -16,41 +16,59 @@ export {};
 
 const { patchRenderEffect, findStyleByCssHref } = require("../../src/effect");
 const { addSandboxCacheWithWujie, deleteWujieById } = require("../../src/common");
+const { processCssLoader } = require("../../src/entry");
+const { genLinkReplaceSymbol } = require("../../src/template");
 
 const CHILD_URL = "http://child.example.com/index.html";
+
+/** 模块级 sandbox 缓存里的 id，测试结束后统一清理 */
+const usedIds: string[] = [];
+
+afterEach(() => {
+  document.body.innerHTML = "";
+  // 断言中途失败时也能清理，避免污染同 worker 的其它用例
+  usedIds.forEach((id) => deleteWujieById(id));
+  usedIds.length = 0;
+  jest.restoreAllMocks();
+});
 
 /** 等待劫持链路中的样式内容 promise 落定 */
 function flush(): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
-function createSandbox(id: string, iframe: HTMLIFrameElement): any {
+function createSandbox(id: string, iframe: HTMLIFrameElement, fetchImpl?: () => Promise<any>): any {
   return {
     id,
     styleSheetElements: [],
     replace: (html: string) => html,
-    fetch: () => Promise.resolve(new Response(".dedupe{color:red}")),
+    fetch: fetchImpl || (() => Promise.resolve(new Response(".dedupe{color:red}"))),
     plugins: [],
     iframe,
     lifecycles: { loadError: () => undefined },
     proxyLocation: new URL(CHILD_URL) as any,
     fiber: false,
     degrade: false,
+    // 非去重路径会走到 handleStylesheetElementPatch，需要这两个字段存在
+    inject: {},
+    deferredStyleObservers: [],
   };
 }
 
-/** 构造 shadow-root 模式的渲染根，并在其 head 内放入入口 HTML 内联出来的 style */
-function createShadowRender(href: string, id: string) {
+/** 构造 shadow-root 模式的渲染根，并按需在 head 内放入入口 HTML 内联出来的 style */
+function createShadowRender(href: string, id: string, fetchImpl?: () => Promise<any>, withEntryStyle = true) {
   const host = document.createElement("div");
   document.body.appendChild(host);
   const shadowRoot: any = host.attachShadow({ mode: "open" });
 
   const head = document.createElement("head");
   const body = document.createElement("body");
-  const entryStyle = document.createElement("style");
-  entryStyle.setAttribute("data-wujie-css-href", href);
-  entryStyle.textContent = `/* ${href} */.entry{color:blue}`;
-  head.appendChild(entryStyle);
+  if (withEntryStyle) {
+    const entryStyle = document.createElement("style");
+    entryStyle.setAttribute("data-wujie-css-href", href);
+    entryStyle.textContent = `/* ${href} */.entry{color:blue}`;
+    head.appendChild(entryStyle);
+  }
   shadowRoot.appendChild(head);
   shadowRoot.appendChild(body);
   shadowRoot.head = head;
@@ -59,17 +77,14 @@ function createShadowRender(href: string, id: string) {
   const iframe = document.createElement("iframe");
   document.body.appendChild(iframe);
 
-  const sandbox = createSandbox(id, iframe);
+  const sandbox = createSandbox(id, iframe, fetchImpl);
   addSandboxCacheWithWujie(id, sandbox);
+  usedIds.push(id);
   patchRenderEffect(shadowRoot, id, false);
   return { shadowRoot, sandbox, host, iframe };
 }
 
 describe("CSS 按 href 去重 / 查找域必须是渲染根", () => {
-  afterEach(() => {
-    document.body.innerHTML = "";
-  });
-
   it("shadow-root 模式：入口 HTML 已内联同 href 样式时不再重复生成 style", async () => {
     const href = "http://child.example.com/assets/index.css";
     const id = "css-dedupe-shadow";
@@ -92,13 +107,13 @@ describe("CSS 按 href 去重 / 查找域必须是渲染根", () => {
 
     expect(shadowRoot.querySelectorAll("style[data-wujie-css-href]")).toHaveLength(1);
     expect(loaded).toBe(1);
-    deleteWujieById(id);
   });
 
   it("降级模式：入口 HTML 已内联同 href 样式时不再重复生成 style", async () => {
     const href = "http://child.example.com/assets/degrade.css";
     const id = "css-dedupe-degrade";
 
+    // 降级模式有两个 iframe：跑 JS 的 sandbox iframe 与承载 DOM 的渲染 iframe
     const sandboxIframe = document.createElement("iframe");
     document.body.appendChild(sandboxIframe);
     const renderIframe = document.createElement("iframe");
@@ -114,6 +129,7 @@ describe("CSS 按 href 去重 / 查找域必须是渲染根", () => {
     const sandbox = createSandbox(id, sandboxIframe);
     sandbox.degrade = true;
     addSandboxCacheWithWujie(id, sandbox);
+    usedIds.push(id);
     patchRenderEffect(renderDocument as any, id, true);
 
     const link = document.createElement("link");
@@ -123,7 +139,6 @@ describe("CSS 按 href 去重 / 查找域必须是渲染根", () => {
     await flush();
 
     expect(renderDocument.querySelectorAll("style[data-wujie-css-href]")).toHaveLength(1);
-    deleteWujieById(id);
   });
 
   it("href 含非法选择器字符时去重查询不抛异常且不误命中", () => {
@@ -134,5 +149,99 @@ describe("CSS 按 href 去重 / 查找域必须是渲染根", () => {
 
     expect(() => findStyleByCssHref(doc, badHref)).not.toThrow();
     expect(findStyleByCssHref(doc, badHref)).toBeNull();
+  });
+
+  it("渲染根内已有 X 时插入 Y，应为 Y 生成独立的 style", async () => {
+    const hrefX = "http://child.example.com/assets/x.css";
+    const hrefY = "http://child.example.com/assets/y.css";
+    const id = "css-dedupe-multi";
+
+    const { shadowRoot } = createShadowRender(hrefX, id);
+
+    const linkY = document.createElement("link");
+    linkY.setAttribute("rel", "stylesheet");
+    linkY.setAttribute("href", hrefY);
+    shadowRoot.head.appendChild(linkY);
+    await flush();
+
+    const styles = Array.from(shadowRoot.querySelectorAll("style[data-wujie-css-href]")) as HTMLStyleElement[];
+    // 入口的 X + 动态生成的 Y
+    expect(styles).toHaveLength(2);
+    expect(styles.some((style) => style.getAttribute("data-wujie-css-href") === hrefX)).toBe(true);
+    expect(styles.some((style) => style.getAttribute("data-wujie-css-href") === hrefY)).toBe(true);
+  });
+});
+
+describe("CSS 按 href 去重 / 加载失败不得阻断后续重试", () => {
+  it("CSS 请求失败后再次插入同一地址，应重新请求并注入内容", async () => {
+    const href = "http://child.example.com/assets/fail-then-retry.css";
+    const id = "css-dedupe-retry";
+
+    // 首次请求 404（fetchAssets 对 cssFlag 会 resolve 成 ""），第二次成功
+    let fetchCount = 0;
+    const fetchImpl = () => {
+      fetchCount += 1;
+      if (fetchCount === 1) {
+        return Promise.resolve({ status: 404, text: () => Promise.resolve("") });
+      }
+      return Promise.resolve(new Response(".retry{color:green}"));
+    };
+    jest.spyOn(console, "error").mockImplementation(() => undefined);
+
+    // 渲染根内没有入口 style，才能走到真实的「加载 → 失败 → 重试」链路
+    const { shadowRoot } = createShadowRender(href, id, fetchImpl, false);
+
+    const insertLink = () => {
+      const link = document.createElement("link");
+      link.setAttribute("rel", "stylesheet");
+      link.setAttribute("href", href);
+      shadowRoot.head.appendChild(link);
+    };
+
+    // 第一次：加载失败
+    insertLink();
+    await flush();
+    expect(fetchCount).toBe(1);
+
+    // 第二次：应重新请求，而不是被首次失败留下的空占位 style 去重掉
+    insertLink();
+    await flush();
+    expect(fetchCount).toBe(2);
+
+    const styles = Array.from(shadowRoot.querySelectorAll("style[data-wujie-css-href]")) as HTMLStyleElement[];
+    expect(styles.some((style) => style.textContent.indexOf(".retry{color:green}") !== -1)).toBe(true);
+  });
+});
+
+describe("入口 HTML 内联失败时不得留下已加载标记", () => {
+  function createEntrySandbox(): any {
+    return {
+      proxyLocation: new URL(CHILD_URL),
+      plugins: [],
+      replace: (html: string) => html,
+    };
+  }
+
+  it("内容为空的样式应保留原始 link，且不产生 data-wujie-css-href", async () => {
+    const src = "http://child.example.com/assets/entry-fail.css";
+    const template = `<html><head>${genLinkReplaceSymbol(src)}</head><body></body></html>`;
+
+    const html = await processCssLoader(createEntrySandbox(), template, () => [
+      { src, contentPromise: Promise.resolve("") },
+    ]);
+
+    expect(html.indexOf("data-wujie-css-href")).toBe(-1);
+    expect(html.indexOf(`<link href="${src}"`)).not.toBe(-1);
+  });
+
+  it("内容非空时仍然输出带标记的 style", async () => {
+    const src = "http://child.example.com/assets/entry-ok.css";
+    const template = `<html><head>${genLinkReplaceSymbol(src)}</head><body></body></html>`;
+
+    const html = await processCssLoader(createEntrySandbox(), template, () => [
+      { src, contentPromise: Promise.resolve(".entry{color:blue}") },
+    ]);
+
+    expect(html.indexOf(`data-wujie-css-href="${src}"`)).not.toBe(-1);
   });
 });

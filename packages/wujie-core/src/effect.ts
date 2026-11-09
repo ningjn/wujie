@@ -296,8 +296,8 @@ export function findStyleByCssHref(doc: Document | ShadowRoot | null, href: stri
  *
  * 用 nodeType / host 做鸭子类型判断，避免跨 realm 的 instanceof 问题。
  */
-function getRenderRoot(insertTarget: Node, fallback: Document): Document | ShadowRoot {
-  const root = insertTarget.getRootNode?.();
+function getRenderRoot(insertTarget: Node, fallback: Document | null): Document | ShadowRoot | null {
+  const root = insertTarget.getRootNode();
   if (root && (root as ShadowRoot).host) return root as ShadowRoot;
   if (root && root.nodeType === 9) return root as Document;
   return fallback;
@@ -395,8 +395,21 @@ function rewriteAppendOrInsertChild(opts: {
                     // 填充 CSS 内容到占位元素
                     // 处理css-loader插件
                     const cssLoader = getCssLoader({ plugins, replace });
-                    placeholderElement.innerHTML = cssLoader(content, src, curUrl);
-                    if (src) placeholderElement.setAttribute("data-wujie-css-href", src);
+                    const cssContent = cssLoader(content, src, curUrl);
+                    placeholderElement.innerHTML = cssContent;
+                    if (src) {
+                      /**
+                       * 去重标记的含义是「该地址的样式已经存在于渲染根内」。
+                       * fetchAssets 对 cssFlag 的失败路径（4xx/5xx 与网络异常）会 resolve 成 ""，
+                       * 因此这里拿到空内容说明 CSS 并没有真正加载成功；
+                       * 此时必须撤销标记，否则这个空占位会被去重查询命中，
+                       * 导致后续对同一地址的插入既不重新请求也拿不到任何样式。
+                       * 注意不能改成「命中时要求内容非空」——pending 中的占位此刻内容同样为空，
+                       * 那样会连带破坏「并发插入同一地址只生成一份样式」的能力。
+                       */
+                      if (cssContent) placeholderElement.setAttribute("data-wujie-css-href", src);
+                      else placeholderElement.removeAttribute("data-wujie-css-href");
+                    }
                     styleSheetElements.push(placeholderElement);
                     // 处理样式补丁
                     handleStylesheetElementPatch(placeholderElement, sandbox);
