@@ -16,7 +16,7 @@ export {};
 
 const { patchRenderEffect, findStyleByCssHref } = require("../../src/effect");
 const { addSandboxCacheWithWujie, deleteWujieById } = require("../../src/common");
-const { processCssLoader } = require("../../src/entry");
+const { processCssLoader, clearAssetsCache } = require("../../src/entry");
 const { genLinkReplaceSymbol } = require("../../src/template");
 
 const CHILD_URL = "http://child.example.com/index.html";
@@ -29,6 +29,8 @@ afterEach(() => {
   // 断言中途失败时也能清理，避免污染同 worker 的其它用例
   usedIds.forEach((id) => deleteWujieById(id));
   usedIds.length = 0;
+  // 模块级 styleCache/scriptCache 共享，清掉避免用例之间串味
+  clearAssetsCache();
   jest.restoreAllMocks();
 });
 
@@ -210,6 +212,56 @@ describe("CSS 按 href 去重 / 加载失败不得阻断后续重试", () => {
 
     const styles = Array.from(shadowRoot.querySelectorAll("style[data-wujie-css-href]")) as HTMLStyleElement[];
     expect(styles.some((style) => style.textContent.indexOf(".retry{color:green}") !== -1)).toBe(true);
+  });
+});
+
+describe("CSS 按 href 去重 / 失败时不得残留空占位", () => {
+  it("内容为空时应移除占位，渲染根内不残留 style", async () => {
+    const href = "http://child.example.com/assets/empty-content.css";
+    const id = "css-dedupe-empty-placeholder";
+
+    const fetchImpl = () => Promise.resolve({ status: 404, text: () => Promise.resolve("") });
+    jest.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const { shadowRoot } = createShadowRender(href, id, fetchImpl, false);
+
+    const link = document.createElement("link");
+    link.setAttribute("rel", "stylesheet");
+    link.setAttribute("href", href);
+    shadowRoot.head.appendChild(link);
+    await flush();
+
+    // 空占位不应残留：既没有标记，也不该在渲染根里堆叠
+    expect(shadowRoot.querySelectorAll("style").length).toBe(0);
+    expect(shadowRoot.querySelectorAll("style[data-wujie-css-href]").length).toBe(0);
+  });
+
+  it("contentPromise reject 时（loadError 回调抛错）同样不残留带标记的占位", async () => {
+    const href = "http://child.example.com/assets/reject.css";
+    const id = "css-dedupe-reject";
+
+    const fetchImpl = () => Promise.resolve({ status: 404, text: () => Promise.resolve("") });
+    jest.spyOn(console, "error").mockImplementation(() => undefined);
+
+    const { shadowRoot, sandbox } = createShadowRender(href, id, fetchImpl, false);
+    // 用户 loadError 回调抛错 → fetchAssets 的 catch 分支再次抛出 → contentPromise reject
+    sandbox.lifecycles.loadError = () => {
+      throw new Error("loadError boom");
+    };
+
+    let errored = 0;
+    const link = document.createElement("link");
+    link.setAttribute("rel", "stylesheet");
+    link.setAttribute("href", href);
+    shadowRoot.head.appendChild(link);
+    link.addEventListener("error", () => {
+      errored += 1;
+    });
+    await flush();
+
+    expect(errored).toBe(1);
+    expect(shadowRoot.querySelectorAll("style[data-wujie-css-href]").length).toBe(0);
+    expect(shadowRoot.querySelectorAll("style").length).toBe(0);
   });
 });
 
