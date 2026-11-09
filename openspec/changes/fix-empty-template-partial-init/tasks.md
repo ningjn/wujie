@@ -32,4 +32,4 @@
 
 - [x] 5.1 检查 `docs/` 中关于子应用渲染流程的描述，如与 `specs/app-rendering/spec.md` 固化的契约（空模板时渲染根仍完整）有出入则同步修正；验证方式：逐条比对文档与 spec 需求，无出入则记录「无需修改」（结论：无需修改——`docs/guide/information.md` 描述的是「`ShadowRoot` 内部的副作用必须进行处理，主要处理的就是 `shadowRoot` 的 `head` 和 `body`」，这正是本次变更要保证的目标状态：空模板路径下 head/body 引用有效且副作用劫持已安装，文档描述与修复后行为一致）
 - [x] 5.2 运行 `npx eslint --ext .ts packages/wujie-core/src/shadow.ts packages/wujie-core/src/sandbox.ts packages/wujie-core/src/constant.ts`，确认无告警；验证方式：eslint 输出为空
-- [ ] 5.3 以中文提交信息按 `<类型>: <简述>` 格式提交本次改动（建议 `fix: 修正空模板场景下渲染根半初始化的问题`）；验证方式：`git log --oneline -1` 显示新提交
+- [x] 5.3 以中文提交信息按 `<类型>: <简述>` 格式提交本次改动（建议 `fix: 修正空模板场景下渲染根半初始化的问题`）；验证方式：`git log --oneline -1` 显示新提交
