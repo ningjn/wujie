@@ -111,6 +111,32 @@ describe("document 代理 / querySelectorAll 始终返回 NodeList", () => {
     expect(one.id).toBe("in-shadow");
   });
 
+  it("getElementById 优先返回渲染根内的元素", () => {
+    const { iframe, shadowRoot, proxyDocument, revoke } = createProxy();
+    revokes.push(revoke);
+    // 渲染根与 iframe 文档内存在同名 id，渲染根里的应当胜出
+    shadowRoot.innerHTML = "<div id='dup'></div>";
+    (iframe.contentDocument as Document).body.innerHTML = "<div id='dup'></div>";
+
+    const res = (proxyDocument.getElementById as any).call(iframe.contentDocument, "dup");
+
+    expect(res).toBeTruthy();
+    expect(res).toBe(shadowRoot.querySelector("#dup"));
+  });
+
+  it("getElementById 在渲染根无匹配时回退到 iframe 文档", () => {
+    const { iframe, proxyDocument, revoke } = createProxy();
+    revokes.push(revoke);
+    (iframe.contentDocument as Document).body.innerHTML = "<div id='only-in-iframe'></div>";
+
+    const res = (proxyDocument.getElementById as any).call(iframe.contentDocument, "only-in-iframe");
+
+    expect(res).toBeTruthy();
+    // 明确锁定元素来自 iframe 文档，而不是别处同 id 的元素
+    expect(res.ownerDocument).toBe(iframe.contentDocument);
+    expect(res.id).toBe("only-in-iframe");
+  });
+
   it("querySelector('base') 在渲染根无匹配时返回 null，且不返回 iframe 文档内的 base", () => {
     const { iframe, proxyDocument, revoke } = createProxy();
     revokes.push(revoke);

@@ -5,6 +5,7 @@
 export {};
 
 const { renderTemplateToShadowRoot, renderTemplateToIframe } = require("../../src/shadow");
+const { addSandboxCacheWithWujie, deleteWujieById } = require("../../src/common");
 const { recordEventListeners } = require("../../src/iframe");
 const { clearAssetsCache: coreClearAssetsCache } = require("../../src/index");
 const WujieVue = require("../../../wujie-vue3/index.js").default;
@@ -18,7 +19,7 @@ describe("empty template rendering", () => {
     const iframe = document.createElement("iframe");
     document.body.appendChild(iframe);
     const iframeWindow: any = iframe.contentWindow;
-    iframeWindow.__WUJIE = {
+    const sandbox = {
       id: "empty-template-upstream",
       url: "http://child.example.com/index.html",
       alive: false,
@@ -33,7 +34,15 @@ describe("empty template rendering", () => {
       lifecycles: { loadError: () => undefined },
       inject: {},
       degrade: false,
+      // 被劫持的 appendChild 会解构这些字段，缺失会导致 undefined.push 报错
+      styleSheetElements: [],
+      fontStyleSheetElements: [],
+      execQueue: [],
+      deferredStyleObservers: [],
     };
+    iframeWindow.__WUJIE = sandbox;
+    // 注册到 sandbox 缓存：被劫持的 appendChild 需要按 id 找到它并解构上述字段
+    addSandboxCacheWithWujie(sandbox.id, sandbox);
     return iframeWindow;
   }
 
@@ -43,6 +52,7 @@ describe("empty template rendering", () => {
 
   afterEach(() => {
     document.body.innerHTML = "";
+    deleteWujieById("empty-template-upstream");
     jest.restoreAllMocks();
   });
 

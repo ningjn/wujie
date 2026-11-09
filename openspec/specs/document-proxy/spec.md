@@ -18,6 +18,16 @@
 - **WHEN** 子应用调用 `document.querySelector` 且渲染根内不存在匹配元素
 - **THEN** 系统 SHALL 返回 iframe 文档内的匹配元素（若存在）
 
+#### Scenario: getElementById 在渲染根内命中
+- **WHEN** 子应用调用 `document.getElementById` 且渲染根内存在该 id 的元素
+- **THEN** 系统 SHALL 返回渲染根内的该元素
+- **AND** 系统 SHALL 不返回 iframe 文档内的同 id 元素
+
+#### Scenario: getElementById 在渲染根内无匹配时回退到 iframe 文档
+- **WHEN** 子应用调用 `document.getElementById` 且渲染根内不存在该 id 的元素
+- **THEN** 系统 SHALL 返回 iframe 文档内的该元素（若存在）
+
+
 ### Requirement: querySelectorAll 始终返回 NodeList
 系统 SHALL 保证 `document.querySelectorAll` 的返回值始终是 NodeList，不得返回 `null` 或其他类型。
 

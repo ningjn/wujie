@@ -316,16 +316,23 @@ new Proxy(
         return new Proxy(shadowRoot.querySelectorAll, {
           apply(querySelectorAll, _ctx, args) {
             let arg = args[0];
-            if (propKey === "getElementsByClassName") arg += ".";
+            if (propKey === "getElementsByClassName") arg = "." + arg;
             if (propKey === "getElementsByName") arg = `[name="${arg}"]`;
             return querySelectorAll.call(shadowRoot, arg);
           },
         });
       }
       if (propKey === "getElementById") {
+        // 优先在渲染根内按 id 查找，未命中时回退 iframe 文档
         return new Proxy(shadowRoot.querySelector, {
           apply(querySelector, _ctx, args) {
-            return querySelector.call(shadowRoot, `#${args[0]}`);
+            return (
+              querySelector.call(shadowRoot, `[id="${args[0]}"]`) ||
+              iframe.contentWindow.__WUJIE_RAW_DOCUMENT_QUERY_SELECTOR__.call(
+                iframe.contentWindow.document,
+                `#${args[0]}`
+              )
+            );
           },
         });
       }
